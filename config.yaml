@@ -1,0 +1,10 @@
+mode: "mock"  # أو "live" لو هنجرب APIs الحقيقية بعدين
+telegram_token: "YOUR_TELEGRAM_TOKEN"
+amazon_api:
+  access_key: "YOUR_AMAZON_ACCESS_KEY"
+  secret_key: "YOUR_AMAZON_SECRET_KEY"
+  partner_tag: "YOUR_PARTNER_TAG"
+ebay_api:
+  app_id: "YOUR_EBAY_APP_ID"
+  cert_id: "YOUR_EBAY_CERT_ID"
+  dev_id: "YOUR_EBAY_DEV_ID"
