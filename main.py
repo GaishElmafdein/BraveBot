@@ -1,6 +1,8 @@
 import os
 import yaml
 import asyncio
+import csv
+import io
 from datetime import datetime, timedelta
 from telegram import Update, BotCommand
 from telegram.ext import (
@@ -12,12 +14,14 @@ from telegram.ext import (
     filters,
 )
 
-# === تحميل متغيرات البيئة (.env) ===
 from dotenv import load_dotenv
 load_dotenv()
 
 # ===== استدعاءات من core =====
-from core.database_manager import get_user_stats, update_user_stats, add_log, get_leaderboard
+from core.database_manager import (
+    get_user_stats, update_user_stats, add_log, get_leaderboard,
+    export_user_stats, reset_user_stats
+)
 from core.compliance_checker import check_product_compliance
 
 # ===== تحميل الإعدادات =====
@@ -32,24 +36,19 @@ except FileNotFoundError:
         "rate_limit": {"checks_per_hour": 50, "checks_per_day": 200},
     }
 
-# ===== توكن البوت =====
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_IDS = config.get("admin_ids", [])
 
-# ===== حالة المحادثة =====
 ASK_NAME, ASK_PRICE = range(2)
-
-# ===== نظام Rate Limiting =====
 user_requests = {}
 
+# ===== Rate Limit =====
 def check_rate_limit(user_id):
-    """تحقق من حدود الاستخدام"""
     now = datetime.now()
 
     if user_id not in user_requests:
         user_requests[user_id] = {"hour": [], "day": []}
 
-    # تنظيف الطلبات القديمة
     user_requests[user_id]["hour"] = [
         req for req in user_requests[user_id]["hour"] if now - req < timedelta(hours=1)
     ]
@@ -57,7 +56,6 @@ def check_rate_limit(user_id):
         req for req in user_requests[user_id]["day"] if now - req < timedelta(days=1)
     ]
 
-    # تحقق من الحدود
     hourly_limit = config["rate_limit"]["checks_per_hour"]
     daily_limit = config["rate_limit"]["checks_per_day"]
 
@@ -66,12 +64,10 @@ def check_rate_limit(user_id):
     if len(user_requests[user_id]["day"]) >= daily_limit:
         return False, "day"
 
-    # إضافة الطلب الحالي
     user_requests[user_id]["hour"].append(now)
     user_requests[user_id]["day"].append(now)
 
     return True, None
-
 
 # ===== /start =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,12 +79,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 `/stats` - إحصائياتك الشخصية\n"
         f"🏆 `/leaderboard` - أفضل المستخدمين\n"
         f"ℹ️ `/help` - المساعدة الكاملة\n"
-        f"⚙️ `/settings` - إعدادات الحساب\n\n"
+        f"⚙️ `/settings` - إعدادات الحساب\n"
+        f"📤 `/export` - تصدير بياناتك\n"
+        f"🗑️ `/reset` - إعادة تعيين الإحصائيات\n\n"
         f"✨ **جديد:** نظام حماية من الإفراط في الاستخدام!"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown")
-    add_log(f"User {update.effective_user.id} ({user_name}) بدأ استخدام البوت")
-
+    add_log(f"User {update.effective_user.id} ({user_name}) بدأ استخدام البوت", user_id=update.effective_user.id)
 
 # ===== /help =====
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,14 +99,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/leaderboard` - أفضل المستخدمين\n\n"
         "⚙️ **الإعدادات:**\n"
         "• `/settings` - إعدادات حسابك\n"
-        "• `/export` - تصدير بياناتك\n\n"
+        "• `/export` - تصدير بياناتك\n"
+        "• `/reset` - إعادة تعيين الإحصائيات\n\n"
         "📋 **حدود الاستخدام:**\n"
         f"• {config['rate_limit']['checks_per_hour']} فحص/ساعة\n"
         f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n\n"
         f"💡 **نصيحة:** استخدم أسماء واضحة للمنتجات!"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
-
 
 # ===== /stats =====
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -147,12 +144,11 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(message, parse_mode="Markdown")
-        add_log(f"User {user_id} استعرض الإحصائيات - المستوى: {level}")
+        add_log(f"User {user_id} استعرض الإحصائيات - المستوى: {level}", user_id=user_id)
 
     except Exception as e:
-        add_log(f"Database error in /stats: {str(e)}", level="ERROR")
+        add_log(f"Database error in /stats: {str(e)}", level="ERROR", user_id=user_id)
         await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإحصائيات. حاول مرة أخرى.")
-
 
 # ===== /leaderboard =====
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,7 +167,6 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         add_log(f"Database error in /leaderboard: {str(e)}", level="ERROR")
         await update.message.reply_text("⚠️ حصل خطأ أثناء جلب لوحة الصدارة.")
-
 
 # ===== /settings =====
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -199,8 +194,45 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(settings_msg, parse_mode="Markdown")
 
+# ===== /export =====
+async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    data = export_user_stats(user_id)
+
+    if not data:
+        await update.message.reply_text("⚠️ لا يوجد بيانات لتصديرها.")
+        return
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["User ID", "Total Checks", "Passed", "Failed", "Last Check", "Joined Date"])
+    writer.writerow([
+        data["user_id"], data["total_checks"], data["passed_checks"],
+        data["failed_checks"], data["last_check"], data["joined_date"]
+    ])
+    output.seek(0)
+
+    await update.message.reply_document(
+        document=io.BytesIO(output.getvalue().encode()),
+        filename="user_stats.csv",
+        caption="📊 تم تصدير بياناتك بنجاح"
+    )
+    add_log(f"User {user_id} صدّر بياناته", user_id=user_id)
+
+# ===== /reset =====
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    reset_user_stats(user_id)
+    await update.message.reply_text(
+        "🗑️ **تمت إعادة تعيين إحصائياتك بنجاح**\n\n"
+        "يمكنك البدء من جديد الآن!"
+    )
+    add_log(f"User {user_id} أعاد تعيين إحصائياته", user_id=user_id)
 
 # ===== /compliance =====
+ASK_NAME, ASK_PRICE = range(2)
+
 async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -224,7 +256,6 @@ async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ASK_NAME
 
-
 async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = update.message.text.strip()
 
@@ -243,7 +274,6 @@ async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💡 **نطاق السعر المقبول:** ${config['min_price']} - ${config['max_price']:,}"
     )
     return ASK_PRICE
-
 
 async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -273,39 +303,30 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # رسالة معالجة
     processing_msg = await update.message.reply_text(
         "🔄 **جارٍ فحص المنتج...**\n"
         "⏳ يرجى الانتظار..."
     )
 
-    # محاكاة وقت المعالجة
     await asyncio.sleep(2)
 
-    # فحص المنتج
     compliance_result = check_product_compliance({
         "name": product_name,
         "price": price,
         "user_id": user_id
     })
 
-    # تأكد أنه Dictionary مش Bool
-    if isinstance(compliance_result, bool):
-        compliance_result = {"compliant": compliance_result}
-
     is_compliant = compliance_result.get("compliant", True)
     reason = compliance_result.get("reason", "")
 
     try:
         update_user_stats(user_id, is_compliant, timestamp)
-        add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}")
+        add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}", user_id=user_id)
     except Exception as e:
-        add_log(f"Database error in compliance: {str(e)}", level="ERROR")
+        add_log(f"Database error in compliance: {str(e)}", level="ERROR", user_id=user_id)
 
-    # حذف رسالة المعالجة
     await processing_msg.delete()
 
-    # النتيجة النهائية
     result_icon = "✅" if is_compliant else "❌"
     result_text = "مطابق للشروط" if is_compliant else "غير مطابق للشروط"
     result_color = "🟢" if is_compliant else "🔴"
@@ -330,20 +351,17 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return ConversationHandler.END
 
-
 # ===== /cancel =====
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❌ **تم إلغاء العملية بنجاح**\n\n"
         "🔄 يمكنك بدء فحص جديد باستخدام `/compliance`"
     )
-    add_log(f"User {update.effective_user.id} ألغى عملية الفحص")
+    add_log(f"User {update.effective_user.id} ألغى عملية الفحص", user_id=update.effective_user.id)
     return ConversationHandler.END
-
 
 # ===== إعداد الأوامر في القائمة =====
 async def setup_bot_commands(app):
-    """إعداد قائمة الأوامر في تليجرام"""
     try:
         commands = [
             BotCommand("start", "بدء استخدام البوت"),
@@ -352,6 +370,8 @@ async def setup_bot_commands(app):
             BotCommand("leaderboard", "أفضل المستخدمين"),
             BotCommand("settings", "إعدادات الحساب"),
             BotCommand("help", "المساعدة"),
+            BotCommand("export", "تصدير بياناتك"),
+            BotCommand("reset", "إعادة تعيين الإحصائيات"),
             BotCommand("cancel", "إلغاء العملية الحالية"),
         ]
         await app.bot.set_my_commands(commands)
@@ -359,17 +379,14 @@ async def setup_bot_commands(app):
     except Exception as e:
         add_log(f"⚠️ Failed to setup bot commands: {str(e)}", level="ERROR")
 
-
 # ===== إعداد قاعدة البيانات =====
 def init_database():
-    """إنشاء الجداول إذا لم تكن موجودة"""
     try:
         from core.database_manager import init_db
         init_db()
         add_log("✅ Database initialized successfully")
     except Exception as e:
         add_log(f"⚠️ Database initialization failed: {str(e)}", level="ERROR")
-
 
 # ===== تشغيل البوت =====
 if __name__ == "__main__":
@@ -379,19 +396,20 @@ if __name__ == "__main__":
 
     add_log("🚀 BraveBot v2.0 starting with enhanced features...")
 
-    # إعداد قاعدة البيانات أولاً
     init_database()
 
     app = Application.builder().token(TOKEN).build()
 
-    # الأوامر المنفصلة
+    # أوامر منفصلة
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(CommandHandler("export", export_command))
+    app.add_handler(CommandHandler("reset", reset_command))
 
-    # ConversationHandler محسن
+    # ConversationHandler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("compliance", compliance_start)],
         states={
@@ -406,7 +424,6 @@ if __name__ == "__main__":
 
     print("🚀 BraveBot v2.0 is running with SUPERCHARGED features!")
 
-    # إعداد قائمة الأوامر بعد بدء التشغيل
     async def post_init(app):
         await setup_bot_commands(app)
 
