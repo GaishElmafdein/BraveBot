@@ -1,4 +1,5 @@
 import sqlite3
+import datetime
 
 # مسار قاعدة البيانات
 DB_PATH = "bravebot.db"
@@ -81,11 +82,12 @@ def get_user_stats(user_id: int):
             "last_check": "لم يتم بعد"
         }
 
-# ================== تسجيل الأحداث (Logs) ==================
-def add_log(message: str):
+# ================== تسجيل الأحداث (Logs) محسّن ==================
+def add_log(message: str, level: str = "INFO"):
     """
-    دالة بسيطة لتسجيل أي حدث مهم.
-    حالياً هتطبع الرسالة فقط في الـ console.
-    ممكن نطورها لاحقاً لتخزينها في جدول logs.
+    دالة محسّنة لتسجيل الأحداث في الـ console.
+    - message: الرسالة المراد طباعتها
+    - level: نوع الرسالة (INFO أو ERROR)
     """
-    print(f"[LOG] {message}")
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [{level}] {message}")
