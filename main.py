@@ -105,7 +105,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# ===== /stats محسن =====
+# ===== /stats =====
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     try:
@@ -210,107 +210,7 @@ async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ASK_NAME
 
-async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    product_name = update.message.text.strip()
-
-    # تحقق من طول الاسم
-    if len(product_name) < 3:
-        await update.message.reply_text("⚠️ اسم المنتج قصير جداً. اكتب اسماً أكثر تفصيلاً (3 أحرف على الأقل).")
-        return ASK_NAME
-
-    if len(product_name) > 100:
-        await update.message.reply_text("⚠️ اسم المنتج طويل جداً. اكتب اسماً أقصر (100 حرف كحد أقصى).")
-        return ASK_NAME
-
-    context.user_data["product_name"] = product_name
-    await update.message.reply_text(
-        f"📦 **المنتج:** {product_name}\n\n"
-        f"💰 **الخطوة 2/2:** اكتب سعر المنتج بالدولار\n\n"
-        f"💡 **نطاق السعر المقبول:** ${config['min_price']} - ${config['max_price']:,}"
-    )
-    return ASK_PRICE
-
-async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    product_name = context.user_data.get("product_name")
-    price_text = update.message.text.strip()
-
-    try:
-        price = float(price_text)
-        if price < config["min_price"] or price > config["max_price"]:
-            await update.message.reply_text(
-                f"⚠️ **سعر خارج النطاق المسموح!**\n\n"
-                f"📊 النطاق المقبول: ${config['min_price']} - ${config['max_price']:,}\n"
-                f"💰 السعر المدخل: ${price:,}\n\n"
-                f"🔄 أعد إدخال السعر:"
-            )
-            return ASK_PRICE
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ **خطأ في تنسيق السعر!**\n\n"
-            "💡 أمثلة صحيحة:\n"
-            "• `29.99`\n"
-            "• `150`\n"
-            "• `1250.5`\n\n"
-            "🔄 أعد إدخال السعر:"
-        )
-        return ASK_PRICE
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # رسالة معالجة
-    processing_msg = await update.message.reply_text(
-        "🔄 **جارٍ فحص المنتج...**\n"
-        "⏳ يرجى الانتظار..."
-    )
-
-    # محاكاة وقت المعالجة
-    await asyncio.sleep(2)
-
-    # فحص المنتج
-    compliance_result = check_product_compliance({
-        "name": product_name,
-        "price": price,
-        "user_id": user_id
-    })
-
-    is_compliant = compliance_result.get("compliant", True)
-    reason = compliance_result.get("reason", "")
-
-    try:
-        update_user_stats(user_id, is_compliant, timestamp)
-        add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}")
-    except Exception as e:
-        add_log(f"Database error in compliance: {str(e)}")
-
-    # حذف رسالة المعالجة
-    await processing_msg.delete()
-
-    # النتيجة النهائية
-    result_icon = "✅" if is_compliant else "❌"
-    result_text = "مطابق للشروط" if is_compliant else "غير مطابق للشروط"
-    result_color = "🟢" if is_compliant else "🔴"
-
-    message = (
-        f"🔍 **نتيجة فحص المنتج**\n"
-        f"━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📦 **المنتج:** {product_name}\n"
-        f"💰 **السعر:** ${price:,.2f}\n"
-        f"{result_color} **النتيجة:** {result_icon} {result_text}\n"
-    )
-
-    if reason:
-        message += f"📝 **السبب:** {reason}\n"
-
-    message += (
-        f"\n🕒 **وقت الفحص:** {timestamp}\n"
-        f"📊 استخدم `/stats` لرؤية إحصائياتك"
-    )
-
-    await update.message.reply_text(message, parse_mode="Markdown")
-    return ConversationHandler.END
-
-# ===== /cancel =====
+# ===== cancel =====
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❌ **تم إلغاء العملية بنجاح**\n\n"
@@ -340,10 +240,7 @@ if __name__ == "__main__":
 
     add_log("🚀 BraveBot v2.0 starting with enhanced features...")
 
-    app = Application.builder().token(TOKEN).build()
-
-    # استدعاء setup_bot_commands مباشرة بدون job_queue
-    asyncio.run(setup_bot_commands(app))
+    app = Application.builder().token(TOKEN).post_init(setup_bot_commands).build()
 
     # الأوامر
     app.add_handler(CommandHandler("start", start))
@@ -355,8 +252,7 @@ if __name__ == "__main__":
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("compliance", compliance_start)],
         states={
-            ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, compliance_name)],
-            ASK_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, compliance_price)],
+            ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, compliance_start)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         allow_reentry=True,
