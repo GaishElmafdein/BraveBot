@@ -39,7 +39,7 @@ ADMIN_IDS = config.get("admin_ids", [])
 # ===== حالة المحادثة =====
 ASK_NAME, ASK_PRICE = range(2)
 
-# ===== معاش Rate Limiting =====
+# ===== نظام الـ Rate Limiting =====
 user_requests = {}
 
 def check_rate_limit(user_id):
@@ -288,6 +288,10 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "price": price,
         "user_id": user_id
     })
+
+    # هنا نصلح خطأ الـ bool — لازم تكون Dict
+    if isinstance(compliance_result, bool):
+        compliance_result = {"compliant": compliance_result, "reason": ""}
 
     is_compliant = compliance_result.get("compliant", True)
     reason = compliance_result.get("reason", "")
