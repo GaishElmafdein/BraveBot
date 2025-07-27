@@ -1,5 +1,37 @@
-pyyaml
+# ===== Core Dependencies =====
 python-telegram-bot>=20.3
+pyyaml
 pandas
 scikit-learn
 python-dotenv
+
+# ===== Dashboard & Visualization =====
+streamlit>=1.28.0
+plotly>=5.17.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# ===== Monitoring & Health Checks =====
+aiohttp>=3.8.5
+psutil>=5.9.5
+
+# ===== Security & Encryption =====
+cryptography>=41.0.0
+
+# ===== Testing =====
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# ===== Code Quality =====
+black>=23.7.0
+flake8>=6.0.0
+bandit>=1.7.5
+
+# ===== Performance Monitoring =====
+memory-profiler>=0.60.0
+
+# ===== Additional Utilities =====
+schedule>=1.2.0
+requests>=2.31.0
+numpy>=1.24.0

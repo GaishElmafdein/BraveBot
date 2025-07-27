@@ -1,0 +1,27 @@
+{
+  "auto_update": {
+    "enabled": true,
+    "check_interval_hours": 24,
+    "backup_before_update": true,
+    "restart_after_update": true
+  },
+  "weekly_achievements": {
+    "enabled": true,
+    "send_day": "sunday",
+    "send_time": "18:00",
+    "include_top_users": 5
+  },
+  "feature_flags": {
+    "advanced_analytics": true,
+    "user_recommendations": true,
+    "achievement_predictions": true,
+    "personalized_reports": true
+  },
+  "notifications": {
+    "update_success": true,
+    "update_failure": true,
+    "weekly_reports": true
+  },
+  "version": "2.0.0",
+  "last_update_check": null
+}

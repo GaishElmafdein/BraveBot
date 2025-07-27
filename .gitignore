@@ -1,6 +1,59 @@
-# Ignore Python virtual environment
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 venv/
 .env
-__pycache__/
 *.pyc
+
+# ===== Database Files =====
+bravebot.db
+bravebot.db-*
+*.db
+*.db-journal
+
+# ===== Log Files =====
+*.log
+logs/
+monitoring.log
+backup.log
+
+# ===== Backup Files =====
+backups/
+temp/
+*.bak
+
+# ===== IDE and Editor Files =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
+
+# ===== Testing and Coverage =====
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+
+# ===== Security Files =====
+*.key
+*.pem
+*.crt
+*.enc
+
+# ===== Analytics Data =====
+analytics/*.json
+user_patterns.json
+
+# ===== Railway Deployment =====
+.railway/
+
+# ===== Distribution =====
+build/
+dist/
+*.egg-info/

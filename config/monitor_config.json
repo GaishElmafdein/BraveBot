@@ -1,0 +1,28 @@
+{
+  "check_interval": 60,
+  "max_consecutive_failures": 3,
+  "telegram_chat_id": null,
+  "email_notifications": {
+    "enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "email": "",
+    "password": "",
+    "recipient": ""
+  },
+  "performance_monitoring": {
+    "cpu_threshold": 80,
+    "memory_threshold": 80,
+    "disk_threshold": 90
+  },
+  "auto_restart": {
+    "enabled": true,
+    "max_attempts": 3,
+    "restart_delay": 30
+  },
+  "alerts": {
+    "daily_report": true,
+    "weekly_summary": true,
+    "critical_only": false
+  }
+}

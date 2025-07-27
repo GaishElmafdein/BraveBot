@@ -763,3 +763,4 @@ if __name__ == "__main__":
         else:
             print(f"❌ Bot startup error: {e}")
         add_log(f"Bot startup failed: {str(e)}", level="ERROR")
+

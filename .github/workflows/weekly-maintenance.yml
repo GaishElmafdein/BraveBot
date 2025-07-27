@@ -1,0 +1,62 @@
+name: 📅 Weekly Tasks & Maintenance
+
+on:
+  schedule:
+    # تشغيل كل يوم أحد في الساعة 2 صباحاً بتوقيت UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  weekly-maintenance:
+    name: 🔧 Weekly Maintenance
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📋 Install Dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: 🗃️ Create Weekly Backup
+      run: |
+        python scripts/backup_system.py
+        echo "✅ Weekly backup created"
+    
+    - name: 📊 Generate Weekly Report
+      run: |
+        python scripts/weekly_report.py
+        echo "✅ Weekly report generated"
+    
+    - name: 🧹 Cleanup Old Files
+      run: |
+        # حذف الملفات المؤقتة القديمة
+        find . -name "*.tmp" -type f -mtime +7 -delete
+        find . -name "*.log" -type f -mtime +30 -delete
+        echo "✅ Cleanup completed"
+    
+    - name: 🔍 Security Audit
+      run: |
+        pip install safety
+        safety check -r requirements.txt --json > security_report.json || true
+        echo "✅ Security audit completed"
+    
+    - name: 📈 Performance Analysis
+      run: |
+        python scripts/performance_analyzer.py
+        echo "✅ Performance analysis completed"
+    
+    - name: 📤 Upload Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: weekly-reports
+        path: |
+          security_report.json
+          performance_report.json
+          weekly_report.json

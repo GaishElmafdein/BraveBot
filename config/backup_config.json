@@ -1,0 +1,21 @@
+{
+  "database_path": "bravebot.db",
+  "backup_directory": "backups",
+  "max_backups": 30,
+  "compress": true,
+  "encrypt": false,
+  "upload_to_github": true,
+  "upload_to_drive": false,
+  "cleanup_old": true,
+  "backup_schedule": {
+    "daily": true,
+    "weekly": true,
+    "monthly": true,
+    "time": "02:00"
+  },
+  "notifications": {
+    "success": true,
+    "failure": true,
+    "telegram_chat_id": null
+  }
+}
