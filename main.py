@@ -16,9 +16,6 @@ from telegram.ext import (
 from core.database_manager import get_user_stats, update_user_stats, add_log, init_db
 from core.compliance_checker import check_product_compliance
 
-# ===== تهيئة قاعدة البيانات =====
-init_db()
-
 # ===== تحميل الإعدادات =====
 try:
     with open("config/config.yaml", "r", encoding="utf-8") as file:
@@ -38,7 +35,7 @@ ADMIN_IDS = config.get("admin_ids", [])
 # ===== حالة المحادثة =====
 ASK_NAME, ASK_PRICE = range(2)
 
-# ===== نظام Rate Limiting =====
+# ===== معدل الاستخدام (Rate Limiting) =====
 user_requests = {}
 
 def check_rate_limit(user_id):
@@ -96,9 +93,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/compliance` - بدء فحص منتج جديد\n"
         "• `/cancel` - إلغاء العملية الحالية\n\n"
         "📊 **الإحصائيات:**\n"
-        "• `/stats` - إحصائياتك الشخصية\n\n"
+        "• `/stats` - إحصائياتك الشخصية\n"
+        "• `/leaderboard` - أفضل المستخدمين\n\n"
         "⚙️ **الإعدادات:**\n"
-        "• `/settings` - إعدادات حسابك\n\n"
+        "• `/settings` - إعدادات حسابك\n"
+        "• `/export` - تصدير بياناتك\n\n"
         "📋 **حدود الاستخدام:**\n"
         f"• {config['rate_limit']['checks_per_hour']} فحص/ساعة\n"
         f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n\n"
@@ -106,7 +105,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# ===== /stats محسن =====
+# ===== /stats =====
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     try:
@@ -115,10 +114,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total = stats["total_checks"]
         passed = stats["passed_checks"]
         failed = stats["failed_checks"]
-
         success_rate = (passed / total * 100) if total > 0 else 0
 
-        # تحديد المستوى حسب عدد الفحوصات
+        # تحديد المستوى
         if total < 10:
             level = "🥉 مبتدئ"
         elif total < 50:
@@ -128,16 +126,16 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             level = "💎 أسطورة"
 
-        # رسالة الإحصائيات
         message = (
             f"📊 **إحصائيات {update.effective_user.first_name}**\n"
             f"━━━━━━━━━━━━━━━━━━━\n\n"
             f"🏆 **مستواك:** {level}\n\n"
-            f"🔍 إجمالي الفحوصات: `{total}`\n"
-            f"✅ المقبولة: `{passed}`\n"
-            f"❌ المرفوضة: `{failed}`\n"
+            f"📈 **الأرقام:**\n"
+            f"🔍 إجمالي الفحوصات: `{total:,}`\n"
+            f"✅ المقبولة: `{passed:,}`\n"
+            f"❌ المرفوضة: `{failed:,}`\n"
             f"📊 معدل النجاح: `{success_rate:.1f}%`\n\n"
-            f"🕒 آخر فحص: `{stats['last_check']}`"
+            f"🕒 **آخر فحص:** {stats['last_check']}\n"
         )
 
         await update.message.reply_text(message, parse_mode="Markdown")
@@ -158,23 +156,21 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━\n\n"
         f"🆔 معرف المستخدم: `{user_id}`\n"
         f"⏰ هذه الساعة: `{remaining_hour}` فحص\n"
-        f"📅 اليوم: `{remaining_day}` فحص"
+        f"📅 اليوم: `{remaining_day}` فحص\n"
     )
+
     await update.message.reply_text(settings_msg, parse_mode="Markdown")
 
-# ===== /compliance محسن =====
+# ===== /compliance =====
 async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    # تحقق من Rate Limiting
     allowed, limit_type = check_rate_limit(user_id)
     if not allowed:
         limit_msg = "ساعة" if limit_type == "hour" else "يوم"
         await update.message.reply_text(
-            f"⏳ **وصلت للحد الأقصى!**\n"
+            f"⏳ **وصلت للحد الأقصى!**\n\n"
             f"🚫 استنفدت عدد الفحوصات المسموحة لهذه ال{limit_msg}.\n"
-            f"⏰ حاول مرة أخرى لاحقاً.\n\n"
-            f"💡 استخدم `/settings` لمعرفة الحدود المتبقية."
+            f"⏰ حاول مرة أخرى لاحقاً."
         )
         add_log(f"User {user_id} وصل للحد الأقصى - {limit_type}")
         return ConversationHandler.END
@@ -188,14 +184,13 @@ async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = update.message.text.strip()
-
     if len(product_name) < 3:
-        await update.message.reply_text("⚠️ اسم المنتج قصير جداً. اكتب اسماً أطول.")
+        await update.message.reply_text("⚠️ اسم المنتج قصير جداً.")
         return ASK_NAME
 
     context.user_data["product_name"] = product_name
     await update.message.reply_text(
-        f"📦 **المنتج:** {product_name}\n"
+        f"📦 **المنتج:** {product_name}\n\n"
         f"💰 **الخطوة 2/2:** اكتب سعر المنتج بالدولار"
     )
     return ASK_PRICE
@@ -207,90 +202,82 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         price = float(price_text)
-        if price < config["min_price"] or price > config["max_price"]:
-            await update.message.reply_text(
-                f"⚠️ **سعر خارج النطاق المسموح!**\n"
-                f"📊 النطاق: ${config['min_price']} - ${config['max_price']:,}\n"
-                f"🔄 أعد إدخال السعر:"
-            )
-            return ASK_PRICE
     except ValueError:
-        await update.message.reply_text("⚠️ **خطأ في تنسيق السعر!** أعد إدخاله:")
+        await update.message.reply_text("⚠️ السعر غير صحيح. أعد الإدخال.")
         return ASK_PRICE
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     processing_msg = await update.message.reply_text("🔄 **جارٍ فحص المنتج...**")
     await asyncio.sleep(2)
 
-    compliance_result = check_product_compliance({
-        "name": product_name,
-        "price": price,
-        "user_id": user_id
-    })
-
+    compliance_result = check_product_compliance({"name": product_name, "price": price, "user_id": user_id})
     is_compliant = compliance_result.get("compliant", True)
 
     try:
         update_user_stats(user_id, is_compliant, timestamp)
-        add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}")
     except Exception as e:
         add_log(f"Database error in compliance: {str(e)}", level="ERROR")
 
     await processing_msg.delete()
 
     result_icon = "✅" if is_compliant else "❌"
-    result_text = "مطابق للشروط" if is_compliant else "غير مطابق للشروط"
-
     message = (
         f"🔍 **نتيجة فحص المنتج**\n"
         f"━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📦 المنتج: {product_name}\n"
-        f"💰 السعر: ${price:,.2f}\n"
-        f"{result_icon} النتيجة: {result_text}\n"
-        f"🕒 وقت الفحص: {timestamp}"
+        f"📦 **المنتج:** {product_name}\n"
+        f"💰 **السعر:** ${price:,.2f}\n"
+        f"{result_icon} **النتيجة:** {'مطابق للشروط' if is_compliant else 'غير مطابق للشروط'}\n"
+        f"🕒 **وقت الفحص:** {timestamp}"
     )
-
     await update.message.reply_text(message, parse_mode="Markdown")
     return ConversationHandler.END
 
 # ===== /cancel =====
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ **تم إلغاء العملية بنجاح**")
-    add_log(f"User {update.effective_user.id} ألغى العملية")
+    await update.message.reply_text("❌ **تم إلغاء العملية بنجاح**\n\n🔄 يمكنك بدء فحص جديد باستخدام `/compliance`")
     return ConversationHandler.END
 
 # ===== إعداد الأوامر =====
 async def setup_bot_commands(app):
-    commands = [
-        BotCommand("start", "بدء استخدام البوت"),
-        BotCommand("compliance", "فحص منتج جديد"),
-        BotCommand("stats", "عرض الإحصائيات"),
-        BotCommand("settings", "إعدادات الحساب"),
-        BotCommand("help", "المساعدة"),
-        BotCommand("cancel", "إلغاء العملية"),
-    ]
-    await app.bot.set_my_commands(commands)
+    try:
+        commands = [
+            BotCommand("start", "بدء استخدام البوت"),
+            BotCommand("compliance", "فحص منتج جديد"),
+            BotCommand("stats", "عرض الإحصائيات"),
+            BotCommand("settings", "إعدادات الحساب"),
+            BotCommand("help", "المساعدة"),
+            BotCommand("cancel", "إلغاء العملية الحالية"),
+        ]
+        await app.bot.set_my_commands(commands)
+        add_log("✅ Bot commands menu setup successfully")
+    except Exception as e:
+        add_log(f"⚠️ Failed to setup bot commands: {str(e)}", level="ERROR")
+
+# ===== إعداد قاعدة البيانات =====
+def init_database():
+    try:
+        init_db()
+        add_log("✅ Database initialized successfully")
+    except Exception as e:
+        add_log(f"⚠️ Database initialization failed: {str(e)}", level="ERROR")
 
 # ===== تشغيل البوت =====
 if __name__ == "__main__":
     if not TOKEN:
-        print("❌ Error: TELEGRAM_TOKEN not found!")
+        print("❌ Error: TELEGRAM_TOKEN not found in environment variables!")
         exit(1)
 
     add_log("🚀 BraveBot v2.0 starting with enhanced features...")
 
+    init_database()
+
     app = Application.builder().token(TOKEN).build()
 
-    app.create_task(setup_bot_commands(app))
-
-    # الأوامر العادية
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings_command))
 
-    # ConversationHandler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("compliance", compliance_start)],
         states={
@@ -300,7 +287,12 @@ if __name__ == "__main__":
         fallbacks=[CommandHandler("cancel", cancel)],
         allow_reentry=True,
     )
+
     app.add_handler(conv_handler)
 
+    async def post_init(app):
+        await setup_bot_commands(app)
+
+    app.post_init = post_init
     print("🚀 BraveBot v2.0 is running with SUPERCHARGED features!")
     app.run_polling(drop_pending_updates=True)
