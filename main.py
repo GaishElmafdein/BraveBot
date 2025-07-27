@@ -12,7 +12,7 @@ from telegram.ext import (
     filters,
 )
 
-# ===== استدعاءات من core (بعد التعديل) =====
+# ===== استدعاءات من core =====
 from core.database_manager import get_user_stats, update_user_stats, add_log
 from core.compliance_checker import check_product_compliance
 
@@ -116,7 +116,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         failed = stats["failed_checks"]
         success_rate = (passed / total * 100) if total > 0 else 0
 
-        # تحديد المستوى حسب عدد الفحوصات
         if total < 10:
             level = "🥉 مبتدئ"
         elif total < 50:
@@ -186,7 +185,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(settings_msg, parse_mode="Markdown")
 
-# ===== /compliance محسن =====
+# ===== /compliance =====
 async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -343,16 +342,16 @@ if __name__ == "__main__":
 
     app = Application.builder().token(TOKEN).build()
 
-    # إعداد قائمة الأوامر
-    app.job_queue.run_once(lambda context: setup_bot_commands(app), when=1)
+    # استدعاء setup_bot_commands مباشرة بدون job_queue
+    asyncio.run(setup_bot_commands(app))
 
-    # الأوامر المنفصلة
+    # الأوامر
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings_command))
 
-    # ConversationHandler محسن
+    # ConversationHandler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("compliance", compliance_start)],
         states={
