@@ -1,11 +1,26 @@
-mode: "mock"  # "live" لتفعيل APIs الحقيقية
+# وضع التشغيل: mock للتجربة / live لتفعيل الـ APIs الحقيقية
+mode: "mock"
 
+# بيانات API الخاصة بـ Amazon
 amazon_api:
   access_key: "YOUR_AMAZON_ACCESS_KEY"
   secret_key: "YOUR_AMAZON_SECRET_KEY"
   partner_tag: "YOUR_PARTNER_TAG"
 
+# بيانات API الخاصة بـ eBay
 ebay_api:
   app_id: "YOUR_EBAY_APP_ID"
   cert_id: "YOUR_EBAY_CERT_ID"
   dev_id: "YOUR_EBAY_DEV_ID"
+
+# أقصى وأدنى سعر مسموح لفحص المنتجات
+max_price: 10000
+min_price: 0.01
+
+# IDs للمشرفين (سيبها فاضية لو مفيش)
+admin_ids: []
+
+# حدود الفحوصات (Rate Limit)
+rate_limit:
+  checks_per_hour: 50
+  checks_per_day: 200
