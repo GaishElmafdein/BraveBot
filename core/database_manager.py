@@ -1,122 +1,130 @@
 import sqlite3
-from datetime import datetime
+import os
 
-# مسار قاعدة البيانات
-DB_PATH = "data/bravebot.db"
+# تحديد مسار قاعدة البيانات بشكل مطلق
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "bravebot.db"))
 
-# ===== تهيئة قاعدة البيانات =====
+# دالة إنشاء قاعدة البيانات والجداول
 def init_db():
-    """
-    إنشاء الجداول لو مش موجودة
-    """
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # يتأكد إن المجلد موجود
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+    cursor = conn.cursor()
 
-    # جدول إحصائيات المستخدمين
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS user_stats (
-            user_id INTEGER PRIMARY KEY,
-            total_checks INTEGER DEFAULT 0,
-            passed_checks INTEGER DEFAULT 0,
-            last_check TEXT
-        )
+    # إنشاء جدول المستخدمين
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_stats (
+        user_id INTEGER PRIMARY KEY,
+        total_checks INTEGER DEFAULT 0,
+        passed_checks INTEGER DEFAULT 0,
+        failed_checks INTEGER DEFAULT 0,
+        last_check TEXT,
+        joined_date TEXT
+    )
+    """)
+
+    # إنشاء جدول اللوج
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT,
+        level TEXT,
+        timestamp TEXT
+    )
     """)
 
     conn.commit()
     conn.close()
 
-# ===== تحديث إحصائيات المستخدم =====
-def update_user_stats(user_id: int, passed: bool, timestamp: str):
-    """
-    تحديث عدد الفحوصات للمستخدم + آخر فحص
-    """
+
+# دالة إضافة لوج
+def add_log(message, level="INFO"):
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    # لو المستخدم مش موجود أضفه
-    cur.execute("""
-        INSERT OR IGNORE INTO user_stats (user_id, total_checks, passed_checks, last_check)
-        VALUES (?, 0, 0, ?)
-    """, (user_id, timestamp))
-
-    # تحديث الإحصائيات
-    cur.execute("""
-        UPDATE user_stats
-        SET total_checks = total_checks + 1,
-            passed_checks = passed_checks + ?,
-            last_check = ?
-        WHERE user_id = ?
-    """, (1 if passed else 0, timestamp, user_id))
-
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO logs (message, level, timestamp) VALUES (?, ?, datetime('now'))",
+        (message, level)
+    )
     conn.commit()
     conn.close()
 
-# ===== جلب إحصائيات المستخدم =====
-def get_user_stats(user_id: int):
-    """
-    استرجاع بيانات الإحصائيات لمستخدم معين
-    """
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT total_checks, passed_checks, last_check
-        FROM user_stats WHERE user_id = ?
-    """, (user_id,))
-    row = cur.fetchone()
-    conn.close()
 
-    if row:
-        total, passed, last_check = row
-        return {
-            "total_checks": total,
-            "passed_checks": passed,
-            "failed_checks": total - passed,
-            "last_check": last_check
-        }
-    else:
+# دالة الحصول على إحصائيات مستخدم
+def get_user_stats(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_stats WHERE user_id=?", (user_id,))
+    row = cursor.fetchone()
+
+    if not row:
+        # لو مفيش بيانات للمستخدم نرجع داتا افتراضية
         return {
             "total_checks": 0,
             "passed_checks": 0,
             "failed_checks": 0,
-            "last_check": "لم يتم بعد"
+            "last_check": "لم يتم بعد",
+            "joined_date": "غير محدد"
         }
 
-# ===== تسجيل الأحداث =====
-def add_log(message: str):
-    """
-    دالة لتسجيل أي حدث مهم (حاليًا تطبع في الـ console)
-    """
-    print(f"[LOG] {datetime.now()} - {message}")
+    return {
+        "total_checks": row[1],
+        "passed_checks": row[2],
+        "failed_checks": row[3],
+        "last_check": row[4],
+        "joined_date": row[5]
+    }
 
-# ===== إرجاع أفضل المستخدمين (Leaderboard) =====
-def get_leaderboard(limit=10):
-    """
-    إرجاع أفضل المستخدمين حسب إجمالي الفحوصات
-    """
+
+# دالة تحديث الإحصائيات
+def update_user_stats(user_id, is_compliant, timestamp):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    try:
+    # لو المستخدم جديد
+    cursor.execute("SELECT * FROM user_stats WHERE user_id=?", (user_id,))
+    row = cursor.fetchone()
+
+    if not row:
         cursor.execute("""
-            SELECT user_id, total_checks
-            FROM user_stats
-            ORDER BY total_checks DESC
-            LIMIT ?
-        """, (limit,))
-        rows = cursor.fetchall()
+            INSERT INTO user_stats (user_id, total_checks, passed_checks, failed_checks, last_check, joined_date)
+            VALUES (?, 1, ?, ?, ?, date('now'))
+        """, (user_id, 1 if is_compliant else 0, 0 if is_compliant else 1, timestamp))
+    else:
+        # تحديث البيانات
+        total = row[1] + 1
+        passed = row[2] + (1 if is_compliant else 0)
+        failed = row[3] + (0 if is_compliant else 1)
 
-        leaderboard = []
-        for row in rows:
-            leaderboard.append({
-                "user_id": row[0],
-                "total_checks": row[1]
-            })
+        cursor.execute("""
+            UPDATE user_stats
+            SET total_checks=?, passed_checks=?, failed_checks=?, last_check=?
+            WHERE user_id=?
+        """, (total, passed, failed, timestamp, user_id))
 
-        return leaderboard
+    conn.commit()
+    conn.close()
+def get_leaderboard(limit=10):
+    """إرجاع أفضل المستخدمين حسب إجمالي الفحوصات"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-    except Exception as e:
-        print(f"Error fetching leaderboard: {e}")
-        return []
+    cursor.execute("""
+        SELECT user_id, total_checks, passed_checks, failed_checks
+        FROM user_stats
+        ORDER BY total_checks DESC
+        LIMIT ?
+    """, (limit,))
 
-    finally:
-        conn.close()
+    rows = cursor.fetchall()
+    conn.close()
+
+    leaderboard = []
+    for row in rows:
+        leaderboard.append({
+            "user_id": row[0],
+            "total_checks": row[1],
+            "passed_checks": row[2],
+            "failed_checks": row[3]
+        })
+
+    return leaderboard
