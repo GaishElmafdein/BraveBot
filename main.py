@@ -19,7 +19,7 @@ load_dotenv()
 
 # ===== استدعاءات من core =====
 from core.database_manager import (
-    get_user_stats, update_user_stats, add_log, get_leaderboard,
+    get_user_stats, update_user_stats, add_log,
     export_user_stats, reset_user_stats
 )
 from core.compliance_checker import check_product_compliance
@@ -40,34 +40,6 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_IDS = config.get("admin_ids", [])
 
 ASK_NAME, ASK_PRICE = range(2)
-user_requests = {}
-
-# ===== Rate Limit =====
-def check_rate_limit(user_id):
-    now = datetime.now()
-
-    if user_id not in user_requests:
-        user_requests[user_id] = {"hour": [], "day": []}
-
-    user_requests[user_id]["hour"] = [
-        req for req in user_requests[user_id]["hour"] if now - req < timedelta(hours=1)
-    ]
-    user_requests[user_id]["day"] = [
-        req for req in user_requests[user_id]["day"] if now - req < timedelta(days=1)
-    ]
-
-    hourly_limit = config["rate_limit"]["checks_per_hour"]
-    daily_limit = config["rate_limit"]["checks_per_day"]
-
-    if len(user_requests[user_id]["hour"]) >= hourly_limit:
-        return False, "hour"
-    if len(user_requests[user_id]["day"]) >= daily_limit:
-        return False, "day"
-
-    user_requests[user_id]["hour"].append(now)
-    user_requests[user_id]["day"].append(now)
-
-    return True, None
 
 # ===== /start =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,12 +49,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🤖 **BraveBot** - فاحص المنتجات الذكي\n\n"
         f"🔍 /compliance - فحص منتج جديد\n"
         f"📊 /stats - إحصائياتك الشخصية\n"
-        f"🏆 /leaderboard - أفضل المستخدمين\n"
+        f"🏅 /achievements - جميع إنجازاتك\n"
         f"ℹ️ /help - المساعدة الكاملة\n"
         f"⚙️ /settings - إعدادات الحساب\n"
         f"📤 /export - تصدير بياناتك\n"
         f"🗑️ /reset - إعادة تعيين الإحصائيات\n\n"
-        f"✨ **جديد:** نظام حماية من الإفراط في الاستخدام!"
+        f"✨ **مصمم خصيصاً لاستخدامك الشخصي!**"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown")
     add_log(f"User {update.effective_user.id} ({user_name}) بدأ استخدام البوت", user_id=update.effective_user.id)
@@ -96,17 +68,59 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /cancel - إلغاء العملية الحالية\n\n"
         "📊 **الإحصائيات:**\n"
         "• /stats - إحصائياتك الشخصية\n"
-        "• /leaderboard - أفضل المستخدمين\n\n"
+        "• /achievements - جميع إنجازاتك\n\n"
         "⚙️ **الإعدادات:**\n"
         "• /settings - إعدادات حسابك\n"
         "• /export - تصدير بياناتك\n"
         "• /reset - إعادة تعيين الإحصائيات\n\n"
-        "📋 **حدود الاستخدام:**\n"
-        f"• {config['rate_limit']['checks_per_hour']} فحص/ساعة\n"
-        f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n\n"
+        "📋 **ملاحظة:**\n"
         f"💡 **نصيحة:** استخدم أسماء واضحة للمنتجات!"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
+
+# ===== نظام الإنجازات الشخصي =====
+def get_achievements(total_checks):
+    """حساب الإنجازات بناءً على عدد الفحوصات"""
+    achievements = []
+    
+    # الإنجازات المتاحة
+    milestones = [
+        (1, "🎯", "البداية", "أول فحص لك!"),
+        (10, "🥉", "مبتدئ", "أول 10 فحوصات"),
+        (50, "🥈", "متقدم", "50 فحص مكتمل"),
+        (100, "🥇", "خبير", "100 فحص محترف"),
+        (250, "💎", "ماسي", "250 فحص متقن"),
+        (500, "🏆", "أسطوري", "500 فحص رائع"),
+        (1000, "👑", "ملكي", "1000 فحص مذهل"),
+        (2000, "🌟", "نجم", "2000 فحص استثنائي"),
+    ]
+    
+    # الإنجازات المكتسبة
+    earned = []
+    next_milestone = None
+    
+    for count, icon, title, desc in milestones:
+        if total_checks >= count:
+            earned.append({"icon": icon, "title": title, "desc": desc, "count": count})
+        else:
+            next_milestone = {"icon": icon, "title": title, "desc": desc, "count": count}
+            break
+    
+    return earned, next_milestone
+
+def get_progress_bar(current, target, length=10):
+    """إنشاء شريط تقدم بصري"""
+    if target == 0:
+        return "█" * length
+    
+    progress = min(current / target, 1.0)
+    filled = int(progress * length)
+    empty = length - filled
+    
+    bar = "█" * filled + "░" * empty
+    percentage = int(progress * 100)
+    
+    return f"{bar} {percentage}%"
 
 # ===== /stats =====
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -120,63 +134,122 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         success_rate = (passed / total * 100) if total > 0 else 0
 
-        if total < 10:
-            level = "🥉 مبتدئ"
-        elif total < 50:
-            level = "🥈 متوسط"
-        elif total < 100:
-            level = "🥇 خبير"
+        # حساب الإنجازات
+        earned_achievements, next_milestone = get_achievements(total)
+        
+        # تحديد المستوى الحالي
+        if earned_achievements:
+            current_level = earned_achievements[-1]  # آخر إنجاز مكتسب
+            level_display = f"{current_level['icon']} {current_level['title']}"
         else:
-            level = "💎 أسطورة"
+            level_display = "🆕 جديد"
 
         message = (
             f"📊 **إحصائيات {update.effective_user.first_name}**\n"
             f"━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🏆 **مستواك:** {level}\n\n"
+            f"🏆 **مستواك:** {level_display}\n\n"
             f"📈 **الأرقام:**\n"
             f"🔍 إجمالي الفحوصات: {total:,}\n"
             f"✅ المقبولة: {passed:,}\n"
             f"❌ المرفوضة: {failed:,}\n"
             f"📊 معدل النجاح: {success_rate:.1f}%\n\n"
+        )
+
+        # عرض الإنجازات المكتسبة
+        if earned_achievements:
+            message += f"🏅 **إنجازاتك ({len(earned_achievements)}):**\n"
+            for achievement in earned_achievements:  # عرض جميع الإنجازات
+                message += f"{achievement['icon']} **{achievement['title']}** - {achievement['desc']}\n"
+            message += "\n"
+        else:
+            message += f"🌟 **الإنجازات:**\n"
+            message += f"🚀 ابدأ أول فحص لتحصل على إنجازات!\n\n"
+
+        # عرض الهدف التالي
+        if next_milestone:
+            remaining = next_milestone['count'] - total
+            progress_bar = get_progress_bar(total, next_milestone['count'])
+            message += (
+                f"🎯 **الهدف التالي:** {next_milestone['icon']} {next_milestone['title']}\n"
+                f"📋 {next_milestone['desc']}\n"
+                f"📊 {progress_bar}\n"
+                f"🔄 باقي {remaining:,} فحص للوصول\n\n"
+            )
+
+        message += (
             f"🕒 **التوقيت:**\n"
             f"📅 آخر فحص: {stats['last_check']}\n"
             f"📈 انضممت: {stats.get('joined_date', 'غير محدد')}\n"
         )
 
         await update.message.reply_text(message, parse_mode="Markdown")
-        add_log(f"User {user_id} استعرض الإحصائيات - المستوى: {level}", user_id=user_id)
+        add_log(f"User {user_id} استعرض الإحصائيات - المستوى: {level_display}", user_id=user_id)
 
     except Exception as e:
         add_log(f"Database error in /stats: {str(e)}", level="ERROR", user_id=user_id)
         await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإحصائيات. حاول مرة أخرى.")
 
-# ===== /leaderboard =====
-async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== /achievements =====
+async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     try:
-        top_users = get_leaderboard(limit=5)
+        stats = get_user_stats(user_id)
+        total = stats["total_checks"]
+        
+        earned_achievements, next_milestone = get_achievements(total)
 
-        if not top_users:
-            await update.message.reply_text("⚠️ لا يوجد بيانات للعرض حالياً.")
-            return
+        message = (
+            f"🏅 **جميع إنجازاتك**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n\n"
+        )
 
-        message = "🏆 **أفضل المستخدمين:**\n━━━━━━━━━━━━━━━\n"
-        for i, user in enumerate(top_users, start=1):
-            message += f"{i}. {user['name']} - {user['total_checks']} فحص\n"
+        if earned_achievements:
+            message += f"✅ **مكتملة ({len(earned_achievements)}):**\n"
+            for achievement in earned_achievements:
+                message += f"{achievement['icon']} **{achievement['title']}** - {achievement['desc']} ({achievement['count']} فحص)\n"
+            message += "\n"
+
+        if next_milestone:
+            remaining = next_milestone['count'] - total
+            progress = get_progress_bar(total, next_milestone['count'])
+            message += (
+                f"🎯 **التالي:**\n"
+                f"{next_milestone['icon']} **{next_milestone['title']}** - {next_milestone['desc']}\n"
+                f"📊 {progress}\n"
+                f"🔄 باقي {remaining:,} فحص\n\n"
+            )
+
+        # عرض باقي الإنجازات المستقبلية
+        all_milestones = [
+            (1, "🎯", "البداية", "أول فحص لك!"),
+            (10, "🥉", "مبتدئ", "أول 10 فحوصات"),
+            (50, "🥈", "متقدم", "50 فحص مكتمل"),
+            (100, "🥇", "خبير", "100 فحص محترف"),
+            (250, "💎", "ماسي", "250 فحص متقن"),
+            (500, "🏆", "أسطوري", "500 فحص رائع"),
+            (1000, "👑", "ملكي", "1000 فحص مذهل"),
+            (2000, "🌟", "نجم", "2000 فحص استثنائي"),
+        ]
+        
+        future_achievements = [m for m in all_milestones if m[0] > total]
+        if future_achievements:
+            message += f"🔮 **قادمة ({len(future_achievements)}):**\n"
+            for count, icon, title, desc in future_achievements[:3]:  # أول 3 قادمة
+                message += f"{icon} **{title}** - {desc} ({count:,} فحص)\n"
+            if len(future_achievements) > 3:
+                message += f"... +{len(future_achievements) - 3} إنجازات أخرى\n"
 
         await update.message.reply_text(message, parse_mode="Markdown")
+        add_log(f"User {user_id} استعرض جميع الإنجازات", user_id=user_id)
+
     except Exception as e:
-        add_log(f"Database error in /leaderboard: {str(e)}", level="ERROR")
-        await update.message.reply_text("⚠️ حصل خطأ أثناء جلب لوحة الصدارة.")
+        add_log(f"Database error in /achievements: {str(e)}", level="ERROR", user_id=user_id)
+        await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإنجازات. حاول مرة أخرى.")
 
 # ===== /settings =====
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    remaining_hour = config["rate_limit"]["checks_per_hour"] - len(
-        user_requests.get(user_id, {}).get("hour", [])
-    )
-    remaining_day = config["rate_limit"]["checks_per_day"] - len(
-        user_requests.get(user_id, {}).get("day", [])
-    )
+    stats = get_user_stats(user_id)
 
     settings_msg = (
         f"⚙️ **إعدادات حسابك:**\n"
@@ -184,9 +257,10 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 **معلومات الحساب:**\n"
         f"🆔 معرف المستخدم: {user_id}\n"
         f"👨‍💼 الاسم: {update.effective_user.first_name}\n\n"
-        f"📊 **حدود الاستخدام المتبقية:**\n"
-        f"⏰ هذه الساعة: {remaining_hour} فحص\n"
-        f"📅 اليوم: {remaining_day} فحص\n\n"
+        f"📊 **إحصائيات سريعة:**\n"
+        f"🔍 إجمالي الفحوصات: {stats['total_checks']:,}\n"
+        f"✅ المقبولة: {stats['passed_checks']:,}\n"
+        f"❌ المرفوضة: {stats['failed_checks']:,}\n\n"
         f"🔧 **خيارات متقدمة:**\n"
         f"📤 /export - تصدير بياناتك\n"
         f"🗑️ /reset - إعادة تعيين الإحصائيات\n"
@@ -234,20 +308,6 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ASK_NAME, ASK_PRICE = range(2)
 
 async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    allowed, limit_type = check_rate_limit(user_id)
-    if not allowed:
-        limit_msg = "ساعة" if limit_type == "hour" else "يوم"
-        await update.message.reply_text(
-            f"⏳ **وصلت للحد الأقصى!**\n\n"
-            f"🚫 استنفدت عدد الفحوصات المسموحة لهذه ال{limit_msg}.\n"
-            f"⏰ حاول مرة أخرى لاحقاً.\n\n"
-            f"💡 استخدم /settings لمعرفة الحدود المتبقية."
-        )
-        add_log(f"User {user_id} وصل للحد الأقصى - {limit_type}")
-        return ConversationHandler.END
-
     await update.message.reply_text(
         "🛒 **بدء فحص منتج جديد**\n"
         "━━━━━━━━━━━━━━━━━━━\n\n"
@@ -321,6 +381,23 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         update_user_stats(user_id, is_compliant, timestamp)
+        
+        # فحص الإنجازات الجديدة
+        updated_stats = get_user_stats(user_id)
+        earned_achievements, _ = get_achievements(updated_stats["total_checks"])
+        old_earned_achievements, _ = get_achievements(updated_stats["total_checks"] - 1)
+        
+        # إذا تم تحقيق إنجاز جديد
+        if len(earned_achievements) > len(old_earned_achievements):
+            new_achievement = earned_achievements[-1]  # الإنجاز الجديد
+            achievement_msg = (
+                f"🎉 **إنجاز جديد مُحقق!** 🎉\n\n"
+                f"{new_achievement['icon']} **{new_achievement['title']}**\n"
+                f"📋 {new_achievement['desc']}\n\n"
+                f"🔥 مبروك! استمر في التقدم!"
+            )
+            await update.message.reply_text(achievement_msg, parse_mode="Markdown")
+        
         add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}", user_id=user_id)
     except Exception as e:
         add_log(f"Database error in compliance: {str(e)}", level="ERROR", user_id=user_id)
@@ -365,6 +442,12 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالج الأخطاء العام للبوت"""
     try:
         error_msg = f"❌ خطأ غير متوقع: {str(context.error)}"
+        
+        # معالجة خاصة لأخطاء التضارب
+        if "Conflict" in str(context.error):
+            print("⚠️ Bot conflict detected - another instance is running")
+            return
+            
         add_log(f"Unhandled error: {str(context.error)}", level="ERROR", 
                 user_id=update.effective_user.id if update and update.effective_user else None)
         
@@ -383,7 +466,7 @@ async def setup_bot_commands(app):
             BotCommand("start", "بدء استخدام البوت"),
             BotCommand("compliance", "فحص منتج جديد"),
             BotCommand("stats", "عرض الإحصائيات"),
-            BotCommand("leaderboard", "أفضل المستخدمين"),
+            BotCommand("achievements", "جميع الإنجازات"),
             BotCommand("settings", "إعدادات الحساب"),
             BotCommand("help", "المساعدة"),
             BotCommand("export", "تصدير بياناتك"),
@@ -414,6 +497,7 @@ if __name__ == "__main__":
     
     # التأكد من عدم وجود instances أخرى
     print("✅ Bot instance check completed")
+    print("⚠️  تأكد من إيقاف البوت على Railway قبل التشغيل المحلي")
 
     add_log("🚀 BraveBot v2.0 starting with enhanced features...")
 
@@ -424,7 +508,7 @@ if __name__ == "__main__":
     # أوامر منفصلة
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats_command))
-    app.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    app.add_handler(CommandHandler("achievements", achievements_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings_command))
     app.add_handler(CommandHandler("export", export_command))
@@ -455,7 +539,17 @@ if __name__ == "__main__":
     
     # تشغيل البوت مع حماية من التشغيل المتعدد
     try:
-        app.run_polling(drop_pending_updates=True, close_loop=False)
+        print("🚀 Starting bot polling... Press Ctrl+C to stop")
+        app.run_polling(
+            drop_pending_updates=True, 
+            close_loop=False,
+            poll_interval=2.0,  # زيادة فترة الاستعلام
+            timeout=30  # مهلة زمنية أطول
+        )
     except Exception as e:
-        print(f"❌ Bot startup error: {e}")
+        if "Conflict" in str(e):
+            print("❌ Bot startup conflict: Another instance is running!")
+            print("💡 Solution: Stop the bot on Railway or wait 30 seconds")
+        else:
+            print(f"❌ Bot startup error: {e}")
         add_log(f"Bot startup failed: {str(e)}", level="ERROR")
