@@ -13,14 +13,17 @@ ebay_api:
   cert_id: "YOUR_EBAY_CERT_ID"
   dev_id: "YOUR_EBAY_DEV_ID"
 
-# أقصى وأدنى سعر مسموح لفحص المنتجات
-max_price: 10000
+# أقصى وأدنى سعر مسموح لفحص المنتجات (مفتوح لحد مليون في النسخة الشخصية)
+max_price: 1000000
 min_price: 0.01
 
-# IDs للمشرفين (سيبها فاضية لو مفيش)
+# ID الخاص بالمالك (أنت)
+owner_id: 1645253698   # استبدل الرقم بـ ID بتاعك لو اتغير
+
+# IDs إضافية للمشرفين (اختياري – سيبها فاضية)
 admin_ids: []
 
-# حدود الفحوصات (Rate Limit)
+# تعطيل الحدود (Rate Limit) لأن البوت شخصي
 rate_limit:
-  checks_per_hour: 50
-  checks_per_day: 200
+  checks_per_hour: 999999
+  checks_per_day: 999999
