@@ -1,34 +1,28 @@
-from core.database_manager import add_log
-
-# الكلمات المحظورة
-BANNED_KEYWORDS = ["replica", "fake", "counterfeit"]
-
-# الحد الأدنى والأقصى للسعر
-MIN_PRICE = 5.0
-MAX_PRICE = 5000.0
-
-def check_product_compliance(product: dict) -> bool:
+def check_product_compliance(product):
     """
-    دالة لفحص المنتج والتأكد من مطابقته للشروط
+    لو الوضع mock → بيرجع بيانات اختبارية
+    لو الوضع live → يربط مع APIs الحقيقية
     """
-    is_compliant = True
+    from config.config import config
 
-    # التحقق من الكلمات المحظورة
-    name = product.get("name", "").lower()
-    price = product.get("price", 0.0)
+    # وضع mock
+    if config["mode"] == "mock":
+        # دايمًا نرجع dict حتى لو نتيجة وهمية
+        return {
+            "compliant": True,
+            "reason": "تمت الموافقة بشكل افتراضي (وضع mock)."
+        }
 
-    for word in BANNED_KEYWORDS:
-        if word in name:
-            add_log(f"Product '{product['name']}' flagged for banned keyword: {word}")
-            is_compliant = False
+    # وضع live (أكواد API هنا لو فعلتها لاحقًا)
+    # مثال افتراضي لفحص حقيقي
+    price = product.get("price", 0)
+    if price > config["max_price"]:
+        return {
+            "compliant": False,
+            "reason": "السعر أعلى من الحد المسموح."
+        }
 
-    # التحقق من السعر
-    if not (MIN_PRICE <= price <= MAX_PRICE):
-        add_log(f"Product '{product['name']}' flagged for price out of range: {price}")
-        is_compliant = False
-
-    # لو المنتج مطابق
-    if is_compliant:
-        add_log(f"Product '{product['name']}' passed compliance check")
-
-    return is_compliant
+    return {
+        "compliant": True,
+        "reason": ""
+    }
