@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 
 # ===== استدعاءات من core =====
-from core.database_manager import get_user_stats, update_user_stats, add_log, init_db
+from core.database_manager import get_user_stats, update_user_stats, add_log
 from core.compliance_checker import check_product_compliance
 
 # ===== تحميل الإعدادات =====
@@ -35,7 +35,7 @@ ADMIN_IDS = config.get("admin_ids", [])
 # ===== حالة المحادثة =====
 ASK_NAME, ASK_PRICE = range(2)
 
-# ===== معدل الاستخدام (Rate Limiting) =====
+# ===== Rate Limiting =====
 user_requests = {}
 
 def check_rate_limit(user_id):
@@ -78,6 +78,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🤖 **BraveBot** - فاحص المنتجات الذكي\n\n"
         f"🔍 `/compliance` - فحص منتج جديد\n"
         f"📊 `/stats` - إحصائياتك الشخصية\n"
+        f"🏆 `/leaderboard` - أفضل المستخدمين\n"
         f"ℹ️ `/help` - المساعدة الكاملة\n"
         f"⚙️ `/settings` - إعدادات الحساب\n\n"
         f"✨ **جديد:** نظام حماية من الإفراط في الاستخدام!"
@@ -101,7 +102,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📋 **حدود الاستخدام:**\n"
         f"• {config['rate_limit']['checks_per_hour']} فحص/ساعة\n"
         f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n\n"
-        f"💡 **نصيحة:** استخدم أسماء واضحة للمنتجات!"
+        "💡 **نصيحة:** استخدم أسماء واضحة للمنتجات!"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -114,9 +115,10 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total = stats["total_checks"]
         passed = stats["passed_checks"]
         failed = stats["failed_checks"]
+
         success_rate = (passed / total * 100) if total > 0 else 0
 
-        # تحديد المستوى
+        # تحديد المستوى حسب عدد الفحوصات
         if total < 10:
             level = "🥉 مبتدئ"
         elif total < 50:
@@ -132,10 +134,12 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🏆 **مستواك:** {level}\n\n"
             f"📈 **الأرقام:**\n"
             f"🔍 إجمالي الفحوصات: `{total:,}`\n"
-            f"✅ المقبولة: `{passed:,}`\n"
-            f"❌ المرفوضة: `{failed:,}`\n"
+            f"✅ المقبولة: `{passed:,}` ({passed/total*100:.1f}%)\n" if total > 0 else f"✅ المقبولة: `0` (0%)\n"
+            f"❌ المرفوضة: `{failed:,}` ({failed/total*100:.1f}%)\n" if total > 0 else f"❌ المرفوضة: `0` (0%)\n"
             f"📊 معدل النجاح: `{success_rate:.1f}%`\n\n"
-            f"🕒 **آخر فحص:** {stats['last_check']}\n"
+            f"🕒 **التوقيت:**\n"
+            f"📅 آخر فحص: `{stats['last_check']}`\n"
+            f"📈 انضممت: `{stats.get('joined_date', 'غير محدد')}`\n"
         )
 
         await update.message.reply_text(message, parse_mode="Markdown")
@@ -144,6 +148,26 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         add_log(f"Database error in /stats: {str(e)}", level="ERROR")
         await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإحصائيات. حاول مرة أخرى.")
+
+# ===== /leaderboard =====
+async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        from core.database_manager import get_leaderboard
+        leaderboard = get_leaderboard()
+
+        if not leaderboard:
+            await update.message.reply_text("لا يوجد مستخدمين حتى الآن في لوحة الشرف.")
+            return
+
+        msg = "🏆 **أفضل المستخدمين:**\n\n"
+        for idx, user in enumerate(leaderboard, 1):
+            msg += f"{idx}. {user['user_id']} - {user['total_checks']} فحص\n"
+
+        await update.message.reply_text(msg, parse_mode="Markdown")
+        add_log("تم عرض لوحة الشرف بنجاح.")
+    except Exception as e:
+        add_log(f"Database error in /leaderboard: {str(e)}", level="ERROR")
+        await update.message.reply_text("⚠️ حصل خطأ أثناء جلب لوحة الشرف.")
 
 # ===== /settings =====
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -164,6 +188,8 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ===== /compliance =====
 async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+
+    # تحقق من Rate Limiting
     allowed, limit_type = check_rate_limit(user_id)
     if not allowed:
         limit_msg = "ساعة" if limit_type == "hour" else "يوم"
@@ -184,8 +210,9 @@ async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product_name = update.message.text.strip()
+
     if len(product_name) < 3:
-        await update.message.reply_text("⚠️ اسم المنتج قصير جداً.")
+        await update.message.reply_text("⚠️ اسم المنتج قصير جداً. اكتب اسماً أطول.")
         return ASK_NAME
 
     context.user_data["product_name"] = product_name
@@ -203,14 +230,17 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         price = float(price_text)
     except ValueError:
-        await update.message.reply_text("⚠️ السعر غير صحيح. أعد الإدخال.")
+        await update.message.reply_text("⚠️ السعر غير صالح. أدخل رقم فقط.")
         return ASK_PRICE
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    processing_msg = await update.message.reply_text("🔄 **جارٍ فحص المنتج...**")
-    await asyncio.sleep(2)
 
-    compliance_result = check_product_compliance({"name": product_name, "price": price, "user_id": user_id})
+    compliance_result = check_product_compliance({
+        "name": product_name,
+        "price": price,
+        "user_id": user_id
+    })
+
     is_compliant = compliance_result.get("compliant", True)
 
     try:
@@ -218,32 +248,38 @@ async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         add_log(f"Database error in compliance: {str(e)}", level="ERROR")
 
-    await processing_msg.delete()
-
     result_icon = "✅" if is_compliant else "❌"
+    result_text = "مطابق للشروط" if is_compliant else "غير مطابق للشروط"
+
     message = (
         f"🔍 **نتيجة فحص المنتج**\n"
         f"━━━━━━━━━━━━━━━━━━━\n\n"
         f"📦 **المنتج:** {product_name}\n"
         f"💰 **السعر:** ${price:,.2f}\n"
-        f"{result_icon} **النتيجة:** {'مطابق للشروط' if is_compliant else 'غير مطابق للشروط'}\n"
-        f"🕒 **وقت الفحص:** {timestamp}"
+        f"{result_icon} **النتيجة:** {result_text}\n"
+        f"🕒 **وقت الفحص:** {timestamp}\n"
     )
+
     await update.message.reply_text(message, parse_mode="Markdown")
     return ConversationHandler.END
 
 # ===== /cancel =====
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ **تم إلغاء العملية بنجاح**\n\n🔄 يمكنك بدء فحص جديد باستخدام `/compliance`")
+    await update.message.reply_text(
+        "❌ **تم إلغاء العملية بنجاح**\n\n"
+        "🔄 يمكنك بدء فحص جديد باستخدام `/compliance`"
+    )
     return ConversationHandler.END
 
 # ===== إعداد الأوامر =====
 async def setup_bot_commands(app):
+    """إعداد قائمة الأوامر في تليجرام"""
     try:
         commands = [
             BotCommand("start", "بدء استخدام البوت"),
             BotCommand("compliance", "فحص منتج جديد"),
             BotCommand("stats", "عرض الإحصائيات"),
+            BotCommand("leaderboard", "أفضل المستخدمين"),  # مضاف جديد
             BotCommand("settings", "إعدادات الحساب"),
             BotCommand("help", "المساعدة"),
             BotCommand("cancel", "إلغاء العملية الحالية"),
@@ -253,28 +289,18 @@ async def setup_bot_commands(app):
     except Exception as e:
         add_log(f"⚠️ Failed to setup bot commands: {str(e)}", level="ERROR")
 
-# ===== إعداد قاعدة البيانات =====
-def init_database():
-    try:
-        init_db()
-        add_log("✅ Database initialized successfully")
-    except Exception as e:
-        add_log(f"⚠️ Database initialization failed: {str(e)}", level="ERROR")
-
 # ===== تشغيل البوت =====
 if __name__ == "__main__":
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not found in environment variables!")
         exit(1)
 
-    add_log("🚀 BraveBot v2.0 starting with enhanced features...")
-
-    init_database()
-
     app = Application.builder().token(TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("leaderboard", leaderboard_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("settings", settings_command))
 
@@ -290,9 +316,9 @@ if __name__ == "__main__":
 
     app.add_handler(conv_handler)
 
+    # إعداد قائمة الأوامر بعد التشغيل
     async def post_init(app):
         await setup_bot_commands(app)
 
     app.post_init = post_init
-    print("🚀 BraveBot v2.0 is running with SUPERCHARGED features!")
     app.run_polling(drop_pending_updates=True)
