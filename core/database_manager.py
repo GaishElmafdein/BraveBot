@@ -1,11 +1,17 @@
 import sqlite3
 
+# مسار قاعدة البيانات
 DB_PATH = "bravebot.db"
 
 # ================== تهيئة قاعدة البيانات ==================
 def init_db():
+    """
+    إنشاء الجداول لو مش موجودة
+    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
+
+    # جدول إحصائيات المستخدمين
     cur.execute("""
         CREATE TABLE IF NOT EXISTS user_stats (
             user_id INTEGER PRIMARY KEY,
@@ -14,22 +20,26 @@ def init_db():
             last_check TEXT
         )
     """)
+
     conn.commit()
     conn.close()
 
 # ================== تحديث إحصائيات المستخدم ==================
 def update_user_stats(user_id: int, passed: bool, timestamp: str):
+    """
+    تحديث عدد الفحوصات للمستخدم + آخر فحص
+    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # تأكد لو المستخدم مش موجود أضفه
+    # لو المستخدم مش موجود أضفه
     cur.execute("""
         INSERT INTO user_stats (user_id, total_checks, passed_checks, last_check)
         VALUES (?, 0, 0, ?)
         ON CONFLICT(user_id) DO NOTHING
     """, (user_id, timestamp))
 
-    # حدث الإحصائيات
+    # تحديث الإحصائيات
     cur.execute("""
         UPDATE user_stats
         SET total_checks = total_checks + 1,
@@ -43,6 +53,9 @@ def update_user_stats(user_id: int, passed: bool, timestamp: str):
 
 # ================== جلب إحصائيات المستخدم ==================
 def get_user_stats(user_id: int):
+    """
+    استرجاع بيانات الإحصائيات لمستخدم معين
+    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("""
@@ -67,3 +80,12 @@ def get_user_stats(user_id: int):
             "failed_checks": 0,
             "last_check": "لم يتم بعد"
         }
+
+# ================== تسجيل الأحداث (Logs) ==================
+def add_log(message: str):
+    """
+    دالة بسيطة لتسجيل أي حدث مهم.
+    حالياً هتطبع الرسالة فقط في الـ console.
+    ممكن نطورها لاحقاً لتخزينها في جدول logs.
+    """
+    print(f"[LOG] {message}")
