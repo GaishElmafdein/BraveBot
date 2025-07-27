@@ -1,54 +1,61 @@
 import sqlite3
 from datetime import datetime
 import os
+import logging
 
 # مسار قاعدة البيانات
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bravebot.db")
 
+# إعداد الـ logging
+logging.basicConfig(level=logging.INFO)
+
 # ===== تهيئة قاعدة البيانات =====
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
 
-    # جدول الإحصائيات
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_stats (
-            user_id INTEGER PRIMARY KEY,
-            total_checks INTEGER DEFAULT 0,
-            passed_checks INTEGER DEFAULT 0,
-            failed_checks INTEGER DEFAULT 0,
-            last_check TEXT,
-            joined_date TEXT
-        )
-    """)
+            # جدول الإحصائيات
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_stats (
+                    user_id INTEGER PRIMARY KEY,
+                    total_checks INTEGER DEFAULT 0,
+                    passed_checks INTEGER DEFAULT 0,
+                    failed_checks INTEGER DEFAULT 0,
+                    last_check TEXT,
+                    joined_date TEXT
+                )
+            """)
 
-    # جدول السجلات
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            message TEXT,
-            level TEXT,
-            timestamp TEXT
-        )
-    """)
+            # جدول السجلات
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    message TEXT,
+                    level TEXT,
+                    timestamp TEXT
+                )
+            """)
 
-    conn.commit()
-    conn.close()
+            conn.commit()
+            logging.info("✅ تم تهيئة قاعدة البيانات بنجاح")
+    except Exception as e:
+        logging.error(f"❌ خطأ في تهيئة قاعدة البيانات: {e}")
 
 # ===== إضافة Log جديد =====
 def add_log(message, level="INFO", user_id=None):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("""
-        INSERT INTO logs (user_id, message, level, timestamp)
-        VALUES (?, ?, ?, ?)
-    """, (user_id, message, level, timestamp))
-
-    conn.commit()
-    conn.close()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("""
+                INSERT INTO logs (user_id, message, level, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, message, level, timestamp))
+            conn.commit()
+    except Exception as e:
+        logging.error(f"❌ خطأ في إضافة Log: {e}")
 
 # ===== جلب الإحصائيات =====
 def get_user_stats(user_id):
