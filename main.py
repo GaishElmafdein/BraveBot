@@ -12,8 +12,8 @@ from telegram.ext import (
     filters,
 )
 
-# ===== استدعاءات من core =====
-from core.manager import get_user_stats, update_user_stats, add_log
+# ===== استدعاءات من core (بعد التعديل) =====
+from core.database_manager import get_user_stats, update_user_stats, add_log
 from core.compliance_checker import check_product_compliance
 
 # ===== تحميل الإعدادات =====
@@ -25,7 +25,7 @@ except FileNotFoundError:
         "max_price": 10000,
         "min_price": 0.01,
         "admin_ids": [],
-        "rate_limit": {"checks_per_hour": 50, "checks_per_day": 200},
+        "rate_limit": {"checks_per_hour": 50, "checks_per_day": 200}
     }
 
 # ===== توكن البوت =====
@@ -47,10 +47,12 @@ def check_rate_limit(user_id):
 
     # تنظيف الطلبات القديمة
     user_requests[user_id]["hour"] = [
-        req for req in user_requests[user_id]["hour"] if now - req < timedelta(hours=1)
+        req for req in user_requests[user_id]["hour"]
+        if now - req < timedelta(hours=1)
     ]
     user_requests[user_id]["day"] = [
-        req for req in user_requests[user_id]["day"] if now - req < timedelta(days=1)
+        req for req in user_requests[user_id]["day"]
+        if now - req < timedelta(days=1)
     ]
 
     # تحقق من الحدود
@@ -76,8 +78,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🤖 **BraveBot** - فاحص المنتجات الذكي\n\n"
         f"🔍 `/compliance` - فحص منتج جديد\n"
         f"📊 `/stats` - إحصائياتك الشخصية\n"
-        f"🏆 `/leaderboard` - أفضل المستخدمين\n"
-        f"ℹ️ `/help` - المساعدة الكاملة\n\n"
+        f"ℹ️ `/help` - المساعدة الكاملة\n"
+        f"⚙️ `/settings` - إعدادات الحساب\n\n"
         f"✨ **جديد:** نظام حماية من الإفراط في الاستخدام!"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown")
@@ -94,14 +96,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• `/stats` - إحصائياتك الشخصية\n"
         "• `/leaderboard` - أفضل المستخدمين\n\n"
         "⚙️ **الإعدادات:**\n"
-        "• `/settings` - إعدادات حسابك\n\n"
-        f"📋 **حدود الاستخدام:**\n"
+        "• `/settings` - إعدادات حسابك\n"
+        "• `/export` - تصدير بياناتك\n\n"
+        "📋 **حدود الاستخدام:**\n"
         f"• {config['rate_limit']['checks_per_hour']} فحص/ساعة\n"
-        f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n"
+        f"• {config['rate_limit']['checks_per_day']} فحص/يوم\n\n"
+        f"💡 **نصيحة:** استخدم أسماء واضحة للمنتجات!"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# ===== /stats =====
+# ===== /stats محسن =====
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     try:
@@ -110,10 +114,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total = stats["total_checks"]
         passed = stats["passed_checks"]
         failed = stats["failed_checks"]
-
         success_rate = (passed / total * 100) if total > 0 else 0
 
-        # مستوى المستخدم
+        # تحديد المستوى حسب عدد الفحوصات
         if total < 10:
             level = "🥉 مبتدئ"
         elif total < 50:
@@ -127,69 +130,206 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 **إحصائيات {update.effective_user.first_name}**\n"
             f"━━━━━━━━━━━━━━━━━━━\n\n"
             f"🏆 **مستواك:** {level}\n\n"
-            f"🔍 إجمالي الفحوصات: `{total}`\n"
-            f"✅ المقبولة: `{passed}`\n"
-            f"❌ المرفوضة: `{failed}`\n"
-            f"📈 معدل النجاح: `{success_rate:.1f}%`\n"
-            f"🕒 آخر فحص: `{stats['last_check']}`"
+            f"📈 **الأرقام:**\n"
+            f"🔍 إجمالي الفحوصات: `{total:,}`\n"
+            f"✅ المقبولة: `{passed:,}` ({passed/total*100:.1f}%)\n" if total > 0 else f"✅ المقبولة: `0` (0%)\n"
+            f"❌ المرفوضة: `{failed:,}` ({failed/total*100:.1f}%)\n" if total > 0 else f"❌ المرفوضة: `0` (0%)\n"
+            f"📊 معدل النجاح: `{success_rate:.1f}%`\n\n"
+            f"🕒 **التوقيت:**\n"
+            f"📅 آخر فحص: `{stats['last_check']}`\n"
+            f"📈 انضممت: `{stats.get('joined_date', 'غير محدد')}`\n\n"
         )
 
+        # شريط التقدم
+        if total < 10:
+            progress = total
+            next_target = 10
+        elif total < 50:
+            progress = total - 10
+            next_target = 40
+        elif total < 100:
+            progress = total - 50
+            next_target = 50
+        else:
+            progress = 100
+            next_target = 100
+
+        progress_bar = "█" * (progress * 10 // next_target) + "░" * (10 - (progress * 10 // next_target))
+        message += f"`{progress_bar}` {progress}/{next_target}"
+
         await update.message.reply_text(message, parse_mode="Markdown")
-        add_log(f"User {user_id} استعرض الإحصائيات")
+        add_log(f"User {user_id} استعرض الإحصائيات - المستوى: {level}")
 
     except Exception as e:
-        add_log(f"Database error in /stats: {str(e)}", level="ERROR")
-        await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإحصائيات.")
+        add_log(f"Database error in /stats: {str(e)}")
+        await update.message.reply_text("⚠️ حصل خطأ أثناء جلب الإحصائيات. حاول مرة أخرى.")
 
-# ===== /leaderboard =====
-async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== /settings =====
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    remaining_hour = config["rate_limit"]["checks_per_hour"] - len(user_requests.get(user_id, {}).get("hour", []))
+    remaining_day = config["rate_limit"]["checks_per_day"] - len(user_requests.get(user_id, {}).get("day", []))
+
+    settings_msg = (
+        f"⚙️ **إعدادات حسابك:**\n"
+        f"━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 **معلومات الحساب:**\n"
+        f"🆔 معرف المستخدم: `{user_id}`\n"
+        f"👨‍💼 الاسم: {update.effective_user.first_name}\n\n"
+        f"📊 **حدود الاستخدام المتبقية:**\n"
+        f"⏰ هذه الساعة: `{remaining_hour}` فحص\n"
+        f"📅 اليوم: `{remaining_day}` فحص\n\n"
+        f"🔧 **خيارات متقدمة:**\n"
+        f"📤 `/export` - تصدير بياناتك\n"
+        f"🗑️ `/reset` - إعادة تعيين الإحصائيات\n"
+    )
+
+    await update.message.reply_text(settings_msg, parse_mode="Markdown")
+
+# ===== /compliance محسن =====
+async def compliance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # تحقق من Rate Limiting
+    allowed, limit_type = check_rate_limit(user_id)
+    if not allowed:
+        limit_msg = "ساعة" if limit_type == "hour" else "يوم"
+        await update.message.reply_text(
+            f"⏳ **وصلت للحد الأقصى!**\n\n"
+            f"🚫 استنفدت عدد الفحوصات المسموحة لهذه ال{limit_msg}.\n"
+            f"⏰ حاول مرة أخرى لاحقاً.\n\n"
+            f"💡 استخدم `/settings` لمعرفة الحدود المتبقية."
+        )
+        add_log(f"User {user_id} وصل للحد الأقصى - {limit_type}")
+        return ConversationHandler.END
+
+    await update.message.reply_text(
+        "🛒 **بدء فحص منتج جديد**\n"
+        "━━━━━━━━━━━━━━━━━━━\n\n"
+        "📝 **الخطوة 1/2:** اكتب اسم المنتج\n\n"
+        "💡 **نصيحة:** كن دقيقاً في الوصف للحصول على أفضل نتيجة!"
+    )
+    return ASK_NAME
+
+async def compliance_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    product_name = update.message.text.strip()
+
+    # تحقق من طول الاسم
+    if len(product_name) < 3:
+        await update.message.reply_text("⚠️ اسم المنتج قصير جداً. اكتب اسماً أكثر تفصيلاً (3 أحرف على الأقل).")
+        return ASK_NAME
+
+    if len(product_name) > 100:
+        await update.message.reply_text("⚠️ اسم المنتج طويل جداً. اكتب اسماً أقصر (100 حرف كحد أقصى).")
+        return ASK_NAME
+
+    context.user_data["product_name"] = product_name
+    await update.message.reply_text(
+        f"📦 **المنتج:** {product_name}\n\n"
+        f"💰 **الخطوة 2/2:** اكتب سعر المنتج بالدولار\n\n"
+        f"💡 **نطاق السعر المقبول:** ${config['min_price']} - ${config['max_price']:,}"
+    )
+    return ASK_PRICE
+
+async def compliance_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    product_name = context.user_data.get("product_name")
+    price_text = update.message.text.strip()
+
     try:
-        import sqlite3
-        conn = sqlite3.connect("bravebot.db")
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT user_id, total_checks, passed_checks
-            FROM user_stats
-            ORDER BY total_checks DESC
-            LIMIT 5
-        """)
-        rows = cur.fetchall()
-        conn.close()
-
-        if not rows:
-            await update.message.reply_text("🏆 لا يوجد مستخدمون في القائمة بعد!")
-            return
-
-        message = "🏆 **أفضل 5 مستخدمين**\n━━━━━━━━━━━━━━━\n\n"
-        rank = 1
-        for user_id, total, passed in rows:
-            success_rate = (passed / total * 100) if total > 0 else 0
-            message += (
-                f"#{rank} - `{user_id}`\n"
-                f"🔍 فحوصات: {total} | معدل نجاح: {success_rate:.1f}%\n\n"
+        price = float(price_text)
+        if price < config["min_price"] or price > config["max_price"]:
+            await update.message.reply_text(
+                f"⚠️ **سعر خارج النطاق المسموح!**\n\n"
+                f"📊 النطاق المقبول: ${config['min_price']} - ${config['max_price']:,}\n"
+                f"💰 السعر المدخل: ${price:,}\n\n"
+                f"🔄 أعد إدخال السعر:"
             )
-            rank += 1
+            return ASK_PRICE
+    except ValueError:
+        await update.message.reply_text(
+            "⚠️ **خطأ في تنسيق السعر!**\n\n"
+            "💡 أمثلة صحيحة:\n"
+            "• `29.99`\n"
+            "• `150`\n"
+            "• `1250.5`\n\n"
+            "🔄 أعد إدخال السعر:"
+        )
+        return ASK_PRICE
 
-        await update.message.reply_text(message, parse_mode="Markdown")
-        add_log("Leaderboard viewed")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # رسالة معالجة
+    processing_msg = await update.message.reply_text(
+        "🔄 **جارٍ فحص المنتج...**\n"
+        "⏳ يرجى الانتظار..."
+    )
+
+    # محاكاة وقت المعالجة
+    await asyncio.sleep(2)
+
+    # فحص المنتج
+    compliance_result = check_product_compliance({
+        "name": product_name,
+        "price": price,
+        "user_id": user_id
+    })
+
+    is_compliant = compliance_result.get("compliant", True)
+    reason = compliance_result.get("reason", "")
+
+    try:
+        update_user_stats(user_id, is_compliant, timestamp)
+        add_log(f"User {user_id} فحص '{product_name}' (${price}) - النتيجة: {'مطابق' if is_compliant else 'غير مطابق'}")
     except Exception as e:
-        add_log(f"Error in /leaderboard: {str(e)}", level="ERROR")
-        await update.message.reply_text("⚠️ خطأ أثناء جلب قائمة المتصدرين.")
+        add_log(f"Database error in compliance: {str(e)}")
 
-# ===== باقي الأوامر (/compliance و /settings و /cancel) =====
-# (هنا نتركها زي ما كانت في الكود السابق لأننا بنضيف بس /leaderboard حالياً)
+    # حذف رسالة المعالجة
+    await processing_msg.delete()
 
-# ===== إعداد الأوامر =====
+    # النتيجة النهائية
+    result_icon = "✅" if is_compliant else "❌"
+    result_text = "مطابق للشروط" if is_compliant else "غير مطابق للشروط"
+    result_color = "🟢" if is_compliant else "🔴"
+
+    message = (
+        f"🔍 **نتيجة فحص المنتج**\n"
+        f"━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📦 **المنتج:** {product_name}\n"
+        f"💰 **السعر:** ${price:,.2f}\n"
+        f"{result_color} **النتيجة:** {result_icon} {result_text}\n"
+    )
+
+    if reason:
+        message += f"📝 **السبب:** {reason}\n"
+
+    message += (
+        f"\n🕒 **وقت الفحص:** {timestamp}\n"
+        f"📊 استخدم `/stats` لرؤية إحصائياتك"
+    )
+
+    await update.message.reply_text(message, parse_mode="Markdown")
+    return ConversationHandler.END
+
+# ===== /cancel =====
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "❌ **تم إلغاء العملية بنجاح**\n\n"
+        "🔄 يمكنك بدء فحص جديد باستخدام `/compliance`"
+    )
+    add_log(f"User {update.effective_user.id} ألغى عملية الفحص")
+    return ConversationHandler.END
+
+# ===== إعداد الأوامر في القائمة =====
 async def setup_bot_commands(app):
+    """إعداد قائمة الأوامر في تليجرام"""
     commands = [
         BotCommand("start", "بدء استخدام البوت"),
         BotCommand("compliance", "فحص منتج جديد"),
         BotCommand("stats", "عرض الإحصائيات"),
-        BotCommand("leaderboard", "أفضل المستخدمين"),
         BotCommand("settings", "إعدادات الحساب"),
         BotCommand("help", "المساعدة"),
-        BotCommand("cancel", "إلغاء العملية"),
+        BotCommand("cancel", "إلغاء العملية الحالية"),
     ]
     await app.bot.set_my_commands(commands)
 
@@ -199,20 +339,31 @@ if __name__ == "__main__":
         print("❌ Error: TELEGRAM_TOKEN not found in environment variables!")
         exit(1)
 
-    add_log("🚀 BraveBot v2.0 starting with leaderboard feature...")
+    add_log("🚀 BraveBot v2.0 starting with enhanced features...")
 
     app = Application.builder().token(TOKEN).build()
 
-    # إعداد الأوامر
+    # إعداد قائمة الأوامر
     app.job_queue.run_once(lambda context: setup_bot_commands(app), when=1)
 
-    # إضافة الأوامر
+    # الأوامر المنفصلة
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats_command))
-    app.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("settings", settings_command))
 
-    # باقي الهاندلرز موجودة في الكود القديم (compliance, settings, cancel...)
+    # ConversationHandler محسن
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("compliance", compliance_start)],
+        states={
+            ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, compliance_name)],
+            ASK_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, compliance_price)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
+    )
 
-    print("🚀 BraveBot v2.0 is running with leaderboard!")
+    app.add_handler(conv_handler)
+
+    print("🚀 BraveBot v2.0 is running with SUPERCHARGED features!")
     app.run_polling(drop_pending_updates=True)
