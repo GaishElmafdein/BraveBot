@@ -1,72 +1,69 @@
 import sqlite3
-from pathlib import Path
 
-DB_PATH = Path("bravebot.db")
+DB_PATH = "bravebot.db"
 
-# إنشاء الجداول لو مش موجودة
+# ================== تهيئة قاعدة البيانات ==================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
-    # جدول المنتجات
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        platform TEXT,
-        price REAL,
-        url TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
+        CREATE TABLE IF NOT EXISTS user_stats (
+            user_id INTEGER PRIMARY KEY,
+            total_checks INTEGER DEFAULT 0,
+            passed_checks INTEGER DEFAULT 0,
+            last_check TEXT
+        )
     """)
+    conn.commit()
+    conn.close()
 
-    # جدول اللوجز (لـ compliance وغيره)
+# ================== تحديث إحصائيات المستخدم ==================
+def update_user_stats(user_id: int, passed: bool, timestamp: str):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # تأكد لو المستخدم مش موجود أضفه
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        message TEXT,
-        level TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
+        INSERT INTO user_stats (user_id, total_checks, passed_checks, last_check)
+        VALUES (?, 0, 0, ?)
+        ON CONFLICT(user_id) DO NOTHING
+    """, (user_id, timestamp))
+
+    # حدث الإحصائيات
+    cur.execute("""
+        UPDATE user_stats
+        SET total_checks = total_checks + 1,
+            passed_checks = passed_checks + ?,
+            last_check = ?
+        WHERE user_id = ?
+    """, (1 if passed else 0, timestamp, user_id))
 
     conn.commit()
     conn.close()
 
-# إضافة منتج
-def add_product(name, platform, price, url):
+# ================== جلب إحصائيات المستخدم ==================
+def get_user_stats(user_id: int):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO products (name, platform, price, url) VALUES (?, ?, ?, ?)",
-                (name, platform, price, url))
-    conn.commit()
+    cur.execute("""
+        SELECT total_checks, passed_checks, last_check
+        FROM user_stats WHERE user_id = ?
+    """, (user_id,))
+    row = cur.fetchone()
     conn.close()
 
-# قراءة كل المنتجات
-def get_products():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM products ORDER BY timestamp DESC")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-# تسجيل أي حدث في اللوج
-def add_log(message, level="INFO"):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("INSERT INTO logs (message, level) VALUES (?, ?)", (message, level))
-    conn.commit()
-    conn.close()
-
-# قراءة اللوجز
-def get_logs(limit=50):
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?", (limit,))
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-# استدعاء إنشاء الجداول أول ما الملف يشتغل
-init_db()
+    if row:
+        total, passed, last_check = row
+        return {
+            "total_checks": total,
+            "passed_checks": passed,
+            "failed_checks": total - passed,
+            "last_check": last_check
+        }
+    else:
+        return {
+            "total_checks": 0,
+            "passed_checks": 0,
+            "failed_checks": 0,
+            "last_check": "لم يتم بعد"
+        }
