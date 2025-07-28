@@ -18,7 +18,11 @@ python-dotenv==1.0.0
 nest-asyncio==1.5.8
 
 # Database & Storage
-sqlite3
+try:
+    import sqlite3
+except ImportError:
+    sqlite3 = None
+    print("⚠️ SQLite3 not available - using alternative storage")
 
 # Date & Time Handling
 python-dateutil==2.8.2
