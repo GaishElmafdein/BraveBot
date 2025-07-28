@@ -10,62 +10,32 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --user --no-cache-dir -r requirements.txt
-
-# Production stage
-FROM python:3.11-slim
-
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash bravebot
-
-# Set work directory
-WORKDIR /app
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy Python packages from builder stage
-COPY --from=builder /root/.local /home/bravebot/.local
-
-# Make sure scripts in .local are usable
-ENV PATH=/home/bravebot/.local/bin:$PATH
+RUN pip install --no-cache-dir --upgrade pip==24.0
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=bravebot:bravebot . .
+COPY . .
 
 # Create necessary directories
-RUN mkdir -p backups logs analytics config \
-    && chown -R bravebot:bravebot /app
-
-# Switch to non-root user
-USER bravebot
-
-# Create default config if not exists
-RUN if [ ! -f config/config.yaml ]; then \
-    echo "max_price: 10000" > config/config.yaml && \
-    echo "min_price: 0.01" >> config/config.yaml && \
-    echo "admin_ids: []" >> config/config.yaml; \
-    fi
-
-# Health check
-HEALTHCHECK --interval=1m --timeout=10s --start-period=30s --retries=3 \
-    CMD python scripts/health_check.py || exit 1
-
-# Expose port (for Railway or other platforms)
-EXPOSE 8000
+RUN mkdir -p data logs reports
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Default command
-CMD ["python", "main.py"]
+# Expose port for Railway
+EXPOSE $PORT
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:$PORT')" || exit 1
+
+# Start command - Railway will override this
+CMD ["python", "-m", "streamlit", "run", "dashboard/app.py", "--server.port=$PORT", "--server.address=0.0.0.0", "--server.headless=true"]

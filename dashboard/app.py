@@ -6,41 +6,45 @@
 """
 
 import streamlit as st
-import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import pandas as pd
+import requests
+import json
+import logging
 from datetime import datetime, timedelta
-import sys
 import os
-import time
-import asyncio
+import sys
 from pathlib import Path
 
+# إعداد اللوغ أولاً
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # إضافة مسار المشروع
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+sys.path.append(str(Path(__file__).parent.parent))
 
-# استيراد الوحدات المحلية
-try:
-    from ai.trends_engine import TrendsFetcher, ViralTrendScanner
-    from core.database_manager import get_user_stats, get_all_users_stats
-    AI_AVAILABLE = True
-    DB_AVAILABLE = True
-except ImportError as e:
-    st.error(f"⚠️ خطأ في استيراد الوحدات: {e}")
-    AI_AVAILABLE = False
-    DB_AVAILABLE = False
-
-# استيراد الوحدات الجديدة
+# استيراد الوحدات المتقدمة (اختياري)
 try:
     from api.ecommerce_tracker import ecommerce_tracker
     from notifications.telegram_alerts import telegram_alerts
     from personalization.user_profiler import user_profiler
     from reports.pdf_generator import pdf_generator
     ADVANCED_FEATURES = True
+    logger.info("✅ Advanced features loaded successfully")
 except ImportError as e:
-    logger.warning(f"المميزات المتقدمة غير متاحة: {e}")
     ADVANCED_FEATURES = False
+    logger.warning(f"⚠️ Advanced features not available: {e}")
+
+# استيراد وحدات الترندات الأساسية
+try:
+    from trends.trend_fetcher import TrendsFetcher
+    from trends.viral_scanner import ViralScanner
+    TRENDS_AVAILABLE = True
+    logger.info("✅ Trends modules loaded successfully")
+except ImportError as e:
+    TRENDS_AVAILABLE = False
+    logger.warning(f"⚠️ Trends modules not available: {e}")
 
 # إعداد الصفحة
 st.set_page_config(
@@ -63,7 +67,7 @@ def init_trends_engines():
     """تهيئة محركات الترندات مع caching"""
     try:
         trends_fetcher = TrendsFetcher()
-        viral_scanner = ViralTrendScanner()
+        viral_scanner = ViralScanner()
         return trends_fetcher, viral_scanner, True
     except Exception as e:
         st.error(f"❌ فشل في تهيئة محركات الترندات: {e}")
