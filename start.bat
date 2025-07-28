@@ -1,4 +1,19 @@
 @echo off
+echo 🔍 Checking for bot conflicts...
+
+python scripts/conflict_checker.py
+if errorlevel 1 (
+    echo ❌ Bot conflict detected!
+    echo Please resolve conflicts and try again.
+    pause
+    exit /b 1
+)
+
+echo ✅ No conflicts detected
+echo 🚀 Starting BraveBot...
+
+python main.py
+pause@echo off
 rem 🚀 BraveBot Windows Startup Script
 rem ===================================
 

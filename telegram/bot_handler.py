@@ -11,9 +11,6 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-import subprocess
-import sys
-from pathlib import Path
 
 # تحميل متغيرات البيئة
 load_dotenv()
@@ -32,7 +29,6 @@ class BraveBot:
     def __init__(self, token: str):
         self.token = token
         self.application = None
-        self.running = False
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """أمر البدء"""
@@ -45,8 +41,6 @@ class BraveBot:
 🔥 **الأوامر المتاحة:**
 • `/trends [keyword]` - تحليل ترند محدد
 • `/hot` - أحدث الترندات الساخنة
-• `/insights` - رؤى أسبوعية
-• `/price [amount] [category]` - اقتراح سعر ديناميكي
 • `/help` - المساعدة
 
 🚀 **ابدأ بتجربة:** `/trends AI` أو `/hot`
@@ -93,6 +87,52 @@ class BraveBot:
         except Exception as e:
             await update.message.reply_text(f"❌ خطأ في تحليل الترند: {str(e)}")
     
+    async def hot_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """أمر الترندات الساخنة"""
+        await update.message.reply_text("🔥 جاري جلب أحدث الترندات...")
+        
+        hot_trends = [
+            {"keyword": "AI Revolution", "score": 95},
+            {"keyword": "iPhone 15", "score": 87},
+            {"keyword": "Tesla Model Y", "score": 82},
+            {"keyword": "ChatGPT Pro", "score": 78},
+            {"keyword": "Meta Quest 3", "score": 71}
+        ]
+        
+        message = "🔥 **أحدث الترندات الساخنة:**\n\n"
+        
+        for i, trend in enumerate(hot_trends, 1):
+            emoji = "🔥" if trend["score"] >= 80 else "📈" if trend["score"] >= 60 else "⚡"
+            message += f"{i}. {emoji} **{trend['keyword']}** - {trend['score']}/100\n"
+        
+        message += "\n💡 استخدم `/trends [اسم الترند]` لتحليل مفصل"
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+    
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """أمر المساعدة"""
+        help_message = """
+🤖 **دليل استخدام BraveBot v2.0**
+
+🔥 **أوامر الترندات:**
+• `/trends [keyword]` - تحليل ترند محدد
+• `/hot` - أحدث الترندات الساخنة
+
+ℹ️ **أوامر عامة:**
+• `/start` - بدء التشغيل
+• `/help` - هذه المساعدة
+
+🌐 **Dashboard:** http://localhost:8501
+        """
+        
+        await update.message.reply_text(help_message, parse_mode='Markdown')
+    
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """معالجة الرسائل العادية"""
+        await update.message.reply_text(
+            f"🤖 شكراً لك! جرب الأوامر مثل `/trends AI` أو `/hot`"
+        )
+    
     def setup_handlers(self):
         """إعداد معالجات الأوامر"""
         if not self.application:
@@ -100,24 +140,16 @@ class BraveBot:
         
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("trends", self.trends_command))
+        self.application.add_handler(CommandHandler("hot", self.hot_command))
+        self.application.add_handler(CommandHandler("help", self.help_command))
         
-        # معالج الرسائل العادية
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
-        )
-    
-    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """معالجة الرسائل العادية"""
-        await update.message.reply_text(
-            f"🤖 شكراً لك! جرب الأوامر مثل `/trends AI`"
         )
     
     async def start_bot(self):
         """بدء تشغيل البوت - إصدار محدث"""
         try:
-            if self.running:
-                return
-            
             logger.info("🚀 Starting BraveBot...")
             
             # إنشاء التطبيق
@@ -126,88 +158,59 @@ class BraveBot:
             # إعداد المعالجات
             self.setup_handlers()
             
-            # تشغيل البوت
-            self.running = True
+            print("🤖 البوت يعمل الآن!")
             
-            # استخدام run_polling بدلاً من start_polling + idle
-            await self.application.run_polling(
-                drop_pending_updates=True,
-                stop_signals=None  # منع الإيقاف التلقائي
-            )
-            
+            # تشغيل البوت - الطريقة المحدثة
+            async with self.application:
+                await self.application.start()
+                await self.application.updater.start_polling(drop_pending_updates=True)
+                
+                try:
+                    # انتظار بدلاً من idle
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    await self.application.updater.stop()
+                    await self.application.stop()
+        
         except Exception as e:
             logger.error(f"❌ Bot startup failed: {e}")
-            self.running = False
             raise
 
-def show_menu():
-    """عرض قائمة الخيارات"""
-    print("\n" + "="*50)
-    print("🤖 BraveBot v2.0 - بدء التشغيل")
-    print("="*50)
-    print("🎯 اختر وضع التشغيل:")
-    print("1. البوت فقط")
-    print("2. Dashboard فقط")
-    print("3. كلاهما معاً (مستحسن)")
-    print("\nاختيارك (1/2/3): ", end="")
-
-def run_dashboard():
-    """تشغيل Dashboard"""
-    try:
-        print("📊 بدء تشغيل Dashboard...")
-        subprocess.run([
-            sys.executable, "-m", "streamlit", "run", 
-            "dashboard/app.py", 
-            "--server.port", "8501"
-        ])
-    except Exception as e:
-        print(f"❌ خطأ في تشغيل Dashboard: {e}")
-
 def run_bot():
-    """تشغيل البوت"""
+    """دالة تشغيل البوت"""
+    if not TOKEN:
+        print("❌ Error: TELEGRAM_TOKEN not found!")
+        return
+    
     try:
-        print("🤖 بدء تشغيل البوت...")
-        subprocess.run([sys.executable, "telegram/bot_handler.py"])
+        # تشغيل مبسط بدون event loop مشترك
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+        bot = BraveBot(TOKEN)
+        asyncio.run(bot.start_bot())
+        
+    except ImportError:
+        # إذا nest_asyncio غير متاح، استخدم طريقة أخرى
+        print("🔄 استخدام الطريقة البديلة...")
+        
+        async def simple_bot():
+            bot = BraveBot(TOKEN)
+            application = Application.builder().token(TOKEN).build()
+            bot.application = application
+            bot.setup_handlers()
+            
+            print("🤖 البوت يعمل الآن!")
+            await application.run_polling(drop_pending_updates=True)
+        
+        asyncio.run(simple_bot())
+        
+    except KeyboardInterrupt:
+        print("\n🛑 تم إيقاف البوت")
     except Exception as e:
         print(f"❌ خطأ في تشغيل البوت: {e}")
 
-def run_both():
-    """تشغيل البوت والDashboard معاً"""
-    import threading
-    
-    print("🚀 تشغيل النظام الكامل...")
-    
-    # تشغيل البوت في thread منفصل
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # تشغيل Dashboard في الthread الرئيسي
-    run_dashboard()
-
-def main():
-    """الدالة الرئيسية"""
-    while True:
-        show_menu()
-        
-        try:
-            choice = input().strip()
-            
-            if choice == "1":
-                run_bot()
-                break
-            elif choice == "2":
-                run_dashboard()
-                break
-            elif choice == "3":
-                run_both()
-                break
-            else:
-                print("❌ خيار غير صحيح! اختر 1، 2، أو 3")
-                
-        except KeyboardInterrupt:
-            print("\n🛑 تم إلغاء التشغيل")
-            break
-
 if __name__ == "__main__":
-    main()
+    run_bot()

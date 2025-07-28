@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime
+import json
 
 # تحديد مسار قاعدة البيانات بشكل صحيح (في جذر المشروع)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # مسار مجلد core
@@ -8,56 +9,77 @@ PROJECT_DIR = os.path.dirname(BASE_DIR)                 # يطلع لفوق لم
 DB_PATH = os.path.join(PROJECT_DIR, "bravebot.db")      # ملف قاعدة البيانات في جذر المشروع
 
 # ========== تهيئة قاعدة البيانات ==========
-def init_db():
-    """إنشاء الجداول المطلوبة لو مش موجودة"""
-    # تأكد إن المسار الأساسي موجود
-    os.makedirs(PROJECT_DIR, exist_ok=True)
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # جدول الإحصائيات
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_stats (
-            user_id INTEGER PRIMARY KEY,
-            total_checks INTEGER DEFAULT 0,
-            passed_checks INTEGER DEFAULT 0,
-            failed_checks INTEGER DEFAULT 0,
-            last_check TEXT,
-            joined_date TEXT
-        )
-    """)
-
-    # جدول السجلات
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            message TEXT,
-            level TEXT,
-            timestamp TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
+def init_database():
+    """تهيئة قاعدة البيانات"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        # إنشاء جدول المستخدمين
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                compliance_checks INTEGER DEFAULT 0,
+                achievements TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # إنشاء جدول السجلات
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                level TEXT DEFAULT 'INFO',
+                message TEXT,
+                user_id INTEGER,
+                details TEXT
+            )
+        ''')
+        
+        # إنشاء جدول البيانات المؤقتة
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cache (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        return False
 
 # ========== إضافة سجل ==========
-def add_log(message, level="INFO", user_id=None):
-    """إضافة سجل جديد إلى جدول السجلات"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("""
-        INSERT INTO logs (user_id, message, level, timestamp)
-        VALUES (?, ?, ?, ?)
-    """, (user_id, message, level, timestamp))
-
-    conn.commit()
-    conn.close()
-
+def add_log(message, level="INFO", user_id=None, details=None):
+    """إضافة سجل جديد"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO logs (message, level, user_id, details)
+            VALUES (?, ?, ?, ?)
+        ''', (message, level, user_id, details))
+        
+        conn.commit()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Logging error: {e}")
+        return False
 
 # ========== تحديث إحصائيات المستخدم ==========
 def update_user_stats(user_id, is_compliant, timestamp):
@@ -171,3 +193,147 @@ def reset_user_stats(user_id):
 
     conn.commit()
     conn.close()
+
+
+def init_database():
+    """تهيئة قاعدة البيانات"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        # إنشاء جدول المستخدمين
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                compliance_checks INTEGER DEFAULT 0,
+                achievements TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # إنشاء جدول السجلات
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                level TEXT DEFAULT 'INFO',
+                message TEXT,
+                user_id INTEGER,
+                details TEXT
+            )
+        ''')
+        
+        # إنشاء جدول البيانات المؤقتة
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cache (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        return False
+
+def add_log(message, level="INFO", user_id=None, details=None):
+    """إضافة سجل جديد"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO logs (message, level, user_id, details)
+            VALUES (?, ?, ?, ?)
+        ''', (message, level, user_id, details))
+        
+        conn.commit()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Logging error: {e}")
+        return False
+
+def get_user_stats(user_id):
+    """جلب إحصائيات المستخدم"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT compliance_checks, achievements, created_at, last_active
+            FROM users WHERE user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                'compliance_checks': result[0],
+                'achievements': json.loads(result[1]) if result[1] else [],
+                'created_at': result[2],
+                'last_active': result[3]
+            }
+        else:
+            return {
+                'compliance_checks': 0,
+                'achievements': [],
+                'created_at': None,
+                'last_active': None
+            }
+            
+    except Exception as e:
+        print(f"Get user stats error: {e}")
+        return {'compliance_checks': 0, 'achievements': []}
+
+def get_all_users_stats():
+    """جلب إحصائيات جميع المستخدمين"""
+    try:
+        conn = sqlite3.connect('bot_data.db')
+        cursor = conn.cursor()
+        
+        # إجمالي المستخدمين
+        cursor.execute('SELECT COUNT(*) FROM users')
+        total_users = cursor.fetchone()[0]
+        
+        # إجمالي فحوص الامتثال
+        cursor.execute('SELECT SUM(compliance_checks) FROM users')
+        total_checks = cursor.fetchone()[0] or 0
+        
+        # المستخدمين النشطين (آخر 30 يوم)
+        cursor.execute('''
+            SELECT COUNT(*) FROM users 
+            WHERE last_active > datetime('now', '-30 days')
+        ''')
+        active_users = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'total_users': total_users,
+            'total_compliance_checks': total_checks,
+            'active_users_30d': active_users,
+            'average_checks_per_user': total_checks / total_users if total_users > 0 else 0
+        }
+        
+    except Exception as e:
+        print(f"Get all users stats error: {e}")
+        return {
+            'total_users': 0,
+            'total_compliance_checks': 0,
+            'active_users_30d': 0,
+            'average_checks_per_user': 0
+        }

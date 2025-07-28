@@ -18,11 +18,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database_manager import update_user_stats, get_user_stats
 from core.compliance_checker import ComplianceChecker
-from ai.trends_engine import generate_weekly_insights, fetch_viral_trends
+from ai.trends_engine import RealTrendsFetcher, ViralTrendScanner
 
 # إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# تهيئة محركات الترندات الحقيقية
+real_trends_fetcher = RealTrendsFetcher()
+real_viral_scanner = ViralTrendScanner()
 
 class BraveBotHandlers:
     """كلاس معالجات البوت"""
@@ -304,6 +308,111 @@ class BraveBotHandlers:
         except Exception as e:
             logger.error(f"خطأ في فحص المحتوى: {e}")
             await status_msg.edit_text("❌ حدث خطأ أثناء الفحص، حاول مرة أخرى.")
+
+    # تحديث دالة تحليل الترند المحددة
+    async def analyze_specific_trend(update: Update, context: ContextTypes.DEFAULT_TYPE, keyword: str):
+        """تحليل ترند محدد باستخدام البيانات الحقيقية"""
+        user_id = update.effective_user.id
+        user_name = update.effective_user.first_name or "صديقي"
+        
+        try:
+            # رسالة انتظار محسنة
+            processing_msg = await update.message.reply_text(
+                f"🔍 **جاري تحليل الترند: `{keyword}`**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📊 **مصادر البيانات الحقيقية:**\n"
+                f"• 🌐 Google Trends API\n"
+                f"• 👥 Reddit Communities API\n"
+                f"• 🔥 حساب نقاط الانتشار الذكية\n\n"
+                f"⏳ **يرجى الانتظار... (15-30 ثانية)**"
+            , parse_mode="Markdown")
+            
+            # تحليل الترند باستخدام البيانات الحقيقية
+            analysis_report = real_trends_fetcher.analyze_combined_trends_real(keyword)
+            
+            # حذف رسالة الانتظار
+            await processing_msg.delete()
+            
+            # بناء رسالة النتائج المحسنة
+            await send_real_trend_analysis_result(update, analysis_report)
+            
+            # تسجيل العملية مع تفاصيل إضافية
+            data_source = analysis_report.get('data_freshness', 'unknown')
+            viral_score = analysis_report['overall_viral_score']
+            add_log(f"User {user_id} analyzed REAL trend: '{keyword}' - Score: {viral_score} - Source: {data_source}", user_id=user_id)
+            
+        except Exception as e:
+            add_log(f"Error in real trend analysis '{keyword}': {str(e)}", level="ERROR", user_id=user_id)
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+            
+            await update.message.reply_text(
+                f"❌ **فشل في تحليل الترند الحقيقي**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🔧 **أسباب محتملة:**\n"
+                f"• انقطاع الاتصال بـ Google Trends\n"
+                f"• مشكلة في Reddit API\n"
+                f"• حد أقصى للطلبات اليومية\n"
+                f"• كلمة مفتاحية غير مدعومة\n\n"
+                f"💡 **الحلول:**\n"
+                f"• جرب كلمة مفتاحية شائعة (مثل: iPhone, Tesla)\n"
+                f"• انتظر بضع دقائق وأعد المحاولة\n"
+                f"• تحقق من الإملاء باللغة الإنجليزية\n\n"
+                f"🔄 **للمحاولة مرة أخرى:** `/trends {keyword}`\n"
+                f"📊 **للترندات السريعة:** `/trends hot`"
+            , parse_mode="Markdown")
+
+    async def send_real_trend_analysis_result(update: Update, analysis_report: Dict[str, Any]):
+        """إرسال نتائج تحليل الترند الحقيقي بتنسيق محسن"""
+        
+        keyword = analysis_report['keyword']
+        viral_score = analysis_report['overall_viral_score']
+        trend_category = analysis_report['trend_category']
+        trend_direction = analysis_report.get('trend_direction', 'مستقر')
+        data_freshness = analysis_report.get('data_freshness', 'unknown')
+        google_trends = analysis_report['google_trends']
+        reddit_trends = analysis_report['reddit_trends']
+        recommendations = analysis_report['recommendations']
+        api_status = analysis_report.get('api_status', {})
+        
+        # رموز الاتجاه
+        direction_emoji = {
+            "صاعد بقوة": "🚀", "صاعد": "📈", 
+            "مستقر": "➡️", "هابط": "📉"
+        }
+        
+        # رموز مصدر البيانات
+        freshness_emoji = {
+            "real-time": "🔴 مباشر", 
+            "cached": "🟡 محفوظ", 
+            "mock": "⚪ تجريبي"
+        }
+        
+        # بناء الرسالة الرئيسية
+        result_message = (
+            f"🔥 **تحليل الترند الحقيقي – `{keyword}`**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🎯 **النتيجة الشاملة:**\n"
+            f"⭐ **نقاط الانتشار:** `{viral_score}/100`\n"
+            f"📊 **تصنيف الترند:** {trend_category}\n"
+            f"📈 **الاتجاه:** {direction_emoji.get(trend_direction, '📊')} {trend_direction}\n"
+            f"🕒 **تحديث البيانات:** {freshness_emoji.get(data_freshness, '⚪ تجريبي')}\n\n"
+            f"📊 **تفاصيل الترند:**\n"
+            f"• **Google Trends:** {google_trends.get('trend_line', 'لا توجد بيانات')}\n"
+            f"• **Reddit Trends:** {reddit_trends.get('top_posts', 'لا توجد بيانات')}\n\n"
+            f"💡 **التوصيات:**\n"
+            f"{recommendations.get('actionable_insights', 'لا توجد توصيات متاحة')}\n\n"
+            f"🔗 **المصادر:** {api_status.get('source_credits', 'غير محددة')}\n"
+            f"📅 **تاريخ التحليل:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"---\n"
+            f"🤖 *تم تحليل هذا الترند باستخدام الذكاء الاصطناعي المتقدم*\n"
+            f"📈 *للحصول على تحليل أعمق، استخدم البيانات الحقيقية من Google وReddit*"
+        )
+        
+        # إرسال الرسالة
+        await update.message.reply_text(result_message, parse_mode='Markdown')
 
 def register_handlers(application: Application):
     """تسجيل معالجات البوت"""
