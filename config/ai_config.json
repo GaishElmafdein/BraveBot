@@ -1,0 +1,33 @@
+{
+  "cache_duration": 300,
+  "max_requests_per_minute": 30,
+  "fallback_mode": true,
+  "debug_mode": false,
+  "engines": {
+    "trends": true,
+    "pricing": true,
+    "insights": true
+  },
+  "apis": {
+    "google_trends": {
+      "enabled": true,
+      "rate_limit": 10,
+      "timeout": 30
+    },
+    "reddit": {
+      "enabled": true,
+      "rate_limit": 20,
+      "timeout": 15
+    }
+  },
+  "fallback_settings": {
+    "use_mock_data": true,
+    "mock_viral_range": [25, 85],
+    "mock_categories": ["Technology", "AI", "Innovation", "Digital"]
+  },
+  "performance": {
+    "cache_cleanup_interval": 1800,
+    "max_cache_size": 1000,
+    "async_timeout": 30
+  }
+}

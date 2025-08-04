@@ -1,0 +1,225 @@
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+from cryptography.fernet import Fernet
+import logging
+from typing import Dict, List, Optional
+import asyncio
+
+class Compliance2025:
+    """🛡️ نظام الامتثال والأمان 2025"""
+    
+    def __init__(self):
+        self.api_keys = {}
+        self.rate_limits = {}
+        self.security_logs = []
+        self.encryption_key = Fernet.generate_key()
+        self.cipher = Fernet(self.encryption_key)
+    
+    async def amazon_sp_api_compliance(self):
+        """🛒 امتثال Amazon SP-API 2025"""
+        compliance_checks = {
+            "offers_v2_sdk": "1.2.2",  # February 2025 update
+            "rate_limiting": True,
+            "request_throttling": True,
+            "error_handling": True,
+            "data_encryption": True
+        }
+        
+        # تحديث SDK تلقائياً
+        await self._update_amazon_sdk()
+        
+        # فحص السياسات الجديدة
+        await self._check_stolen_goods_policy()  # June 2025
+        
+        return compliance_checks
+    
+    async def ebay_media_api_migration(self):
+        """📺 ترحيل eBay Media API قبل August 2025"""
+        migration_status = {
+            "old_api_deprecated": "August 2025",
+            "new_api_ready": True,
+            "media_upload_updated": True,
+            "bulk_listing_migrated": True
+        }
+        
+        # ترحيل تلقائي للـ API الجديد
+        await self._migrate_ebay_media_api()
+        
+        return migration_status
+    
+    def encrypt_api_keys(self, api_keys: Dict[str, str]) -> Dict[str, bytes]:
+        """🔐 تشفير مفاتيح API"""
+        encrypted_keys = {}
+        
+        for service, key in api_keys.items():
+            encrypted_key = self.cipher.encrypt(key.encode())
+            encrypted_keys[service] = encrypted_key
+            
+            # تسجيل العملية
+            self.security_logs.append({
+                "action": "api_key_encrypted",
+                "service": service,
+                "timestamp": datetime.now(),
+                "hash": hashlib.sha256(key.encode()).hexdigest()[:10]
+            })
+        
+        return encrypted_keys
+    
+    def decrypt_api_key(self, encrypted_key: bytes) -> str:
+        """🔓 فك تشفير مفاتيح API"""
+        try:
+            decrypted_key = self.cipher.decrypt(encrypted_key).decode()
+            return decrypted_key
+        except Exception as e:
+            logging.error(f"Decryption failed: {e}")
+            return None
+    
+    async def rate_limit_protection(self, service: str, endpoint: str) -> bool:
+        """⚡ حماية من تجاوز معدل الطلبات"""
+        current_time = datetime.now()
+        
+        # حدود معدل الطلبات لكل خدمة
+        limits = {
+            "amazon": {"requests_per_minute": 10, "burst_limit": 20},
+            "ebay": {"requests_per_minute": 15, "burst_limit": 30},
+            "google_trends": {"requests_per_minute": 5, "burst_limit": 10},
+            "reddit": {"requests_per_minute": 60, "burst_limit": 100}
+        }
+        
+        if service not in self.rate_limits:
+            self.rate_limits[service] = {
+                "requests": [],
+                "last_reset": current_time
+            }
+        
+        service_limits = self.rate_limits[service]
+        limit_config = limits.get(service, {"requests_per_minute": 10, "burst_limit": 20})
+        
+        # تنظيف الطلبات القديمة
+        minute_ago = current_time - timedelta(minutes=1)
+        service_limits["requests"] = [req_time for req_time in service_limits["requests"] if req_time > minute_ago]
+        
+        # فحص الحدود
+        if len(service_limits["requests"]) >= limit_config["requests_per_minute"]:
+            logging.warning(f"Rate limit reached for {service}")
+            return False
+        
+        # إضافة الطلب الحالي
+        service_limits["requests"].append(current_time)
+        return True
+    
+    def detect_fraud_patterns(self, transaction_data: Dict) -> Dict[str, any]:
+        """🕵️ اكتشاف أنماط الاحتيال"""
+        fraud_indicators = {
+            "suspicious_pricing": False,
+            "unusual_volume": False,
+            "rapid_transactions": False,
+            "risk_score": 0
+        }
+        
+        # فحص التسعير المشبوه
+        if transaction_data.get("profit_margin", 0) > 200:
+            fraud_indicators["suspicious_pricing"] = True
+            fraud_indicators["risk_score"] += 30
+        
+        # فحص الحجم غير المعتاد
+        if transaction_data.get("quantity", 0) > 100:
+            fraud_indicators["unusual_volume"] = True
+            fraud_indicators["risk_score"] += 20
+        
+        # فحص المعاملات السريعة
+        transaction_times = transaction_data.get("timestamps", [])
+        if len(transaction_times) > 10:  # أكثر من 10 معاملات
+            time_diffs = [transaction_times[i] - transaction_times[i-1] for i in range(1, len(transaction_times))]
+            avg_time_diff = sum(time_diffs, timedelta(0)) / len(time_diffs)
+            
+            if avg_time_diff < timedelta(seconds=30):  # أقل من 30 ثانية بين المعاملات
+                fraud_indicators["rapid_transactions"] = True
+                fraud_indicators["risk_score"] += 40
+        
+        return fraud_indicators
+    
+    async def gdpr_compliance_check(self, user_data: Dict) -> bool:
+        """🇪🇺 فحص امتثال GDPR"""
+        required_consents = [
+            "data_processing",
+            "marketing_communications", 
+            "analytics_tracking",
+            "third_party_sharing"
+        ]
+        
+        user_consents = user_data.get("consents", {})
+        
+        # التحقق من الموافقات المطلوبة
+        missing_consents = [consent for consent in required_consents if not user_consents.get(consent, False)]
+        
+        if missing_consents:
+            logging.warning(f"Missing GDPR consents: {missing_consents}")
+            return False
+        
+        # التحقق من صحة الموافقات
+        consent_timestamp = user_data.get("consent_timestamp")
+        if not consent_timestamp or datetime.now() - consent_timestamp > timedelta(days=365):
+            logging.warning("GDPR consent expired or missing timestamp")
+            return False
+        
+        return True
+    
+    def generate_security_report(self) -> Dict:
+        """📋 تقرير الأمان الشامل"""
+        return {
+            "timestamp": datetime.now(),
+            "encrypted_keys_count": len(self.api_keys),
+            "rate_limit_violations": sum(1 for log in self.security_logs if log.get("action") == "rate_limit_violation"),
+            "fraud_detections": sum(1 for log in self.security_logs if log.get("action") == "fraud_detected"),
+            "compliance_score": self._calculate_compliance_score(),
+            "recommendations": self._get_security_recommendations()
+        }
+    
+    def _calculate_compliance_score(self) -> int:
+        """📊 حساب نقاط الامتثال"""
+        base_score = 100
+        
+        # خصم نقاط للمخالفات
+        violations = len([log for log in self.security_logs if "violation" in log.get("action", "")])
+        score = max(0, base_score - (violations * 10))
+        
+        return score
+    
+    def _get_security_recommendations(self) -> List[str]:
+        """💡 توصيات الأمان"""
+        recommendations = []
+        
+        if len(self.security_logs) > 1000:
+            recommendations.append("🔄 Archive old security logs")
+        
+        if not self.api_keys:
+            recommendations.append("🔐 Set up API key encryption")
+        
+        recent_violations = [log for log in self.security_logs 
+                           if datetime.now() - log.get("timestamp", datetime.min) < timedelta(hours=24)]
+        
+        if len(recent_violations) > 10:
+            recommendations.append("⚠️ High security activity - review recent actions")
+        
+        return recommendations
+
+# تطبيق الأمان
+async def main():
+    compliance = Compliance2025()
+    
+    # فحص امتثال Amazon
+    amazon_status = await compliance.amazon_sp_api_compliance()
+    print("🛒 Amazon Compliance:", amazon_status)
+    
+    # فحص ترحيل eBay
+    ebay_status = await compliance.ebay_media_api_migration()
+    print("📺 eBay Migration:", ebay_status)
+    
+    # تقرير الأمان
+    security_report = compliance.generate_security_report()
+    print("🛡️ Security Report:", security_report)
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-BraveBot BraveBot AI Commerce Empire - Main Launcher
-==============================================
-نظام متقدم لتحليل الترندات والتجارة الذكية
+BraveBot AI Commerce Empire - Main Launcher (Fixed Version)
+==========================================================
+نظام متقدم لتحليل الترندات والتجارة الذكية - نسخة محسنة
 """
 
 import asyncio
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-# إصلاح Event Loop للنظام الكامل (إضافة)
+# إصلاح Event Loop للنظام الكامل
 import platform
 if platform.system() == 'Windows':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -45,70 +45,69 @@ class BraveBotLauncher:
         """عرض القائمة الرئيسية"""
         
         print("\n" + "="*60)
-        print("BraveBot BraveBot AI Commerce Empire v2.0")
+        print("BraveBot AI Commerce Empire v2.0")
         print("="*60)
         
         # حالة النظام - إصلاح
         try:
             engine_status = get_engine_status()
-            ai_status = "[نجح] نشط" if engine_status.get('status') == 'active' else "[تحذير] جاهز"
+            ai_status = "[SUCCESS] نشط" if engine_status.get('status') == 'active' else "[READY] جاهز"
         except:
-            ai_status = "[نجح] جاهز"
+            ai_status = "[READY] جاهز"
         
         print(f"AI Engine: {ai_status}")
         print(f"الوقت: {datetime.now().strftime('%H:%M:%S')}")
         print("="*60)
         
         print("اختر الخدمة:")
-        print("1. BraveBot البوت فقط (Telegram Bot)")
-        print("2. [تحليل] Dashboard فقط (Web Interface)")
-        print("3. [مميز] النظام الكامل (مستحسن)")
-        print("4. 🔧 الإعدادات والصيانة")
-        print("5. [خطأ] إنهاء البرنامج")
+        print("1. البوت فقط (Telegram Bot)")
+        print("2. Dashboard فقط (Web Interface)")
+        print("3. النظام الكامل (مستحسن)")
+        print("4. الإعدادات والصيانة")
+        print("5. إنهاء البرنامج")
         print("="*60)
         
         return input("اختيارك (1-5): ").strip()
 
     def start_telegram_bot_thread(self):
-        """تشغيل البوت في thread منفصل"""
+        """تشغيل بوت التليجرام في thread منفصل"""
         
         def run_bot():
             try:
-                from bot.telegram_bot import create_bot_application
+                from telegrambot import create_bot_application
                 
                 # إنشاء حلقة أحداث جديدة للبوت
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
                 async def bot_main():
-                    application = await create_bot_application()
-                    print("[نجح] Bot started successfully!")
-                    print("📱 Send /start to your bot to begin!")
+                    application = create_bot_application()
+                    print("[SUCCESS] Bot started successfully!")
+                    print("Send /start to your bot to begin!")
                     
-                    # تشغيل البوت
+                    # تشغيل البوت - الطريقة الصحيحة
                     await application.run_polling(
-                        drop_pending_updates=True,
-                        close_loop=False
+                        drop_pending_updates=True
                     )
                 
                 # تشغيل البوت
                 loop.run_until_complete(bot_main())
                 
             except Exception as e:
-                logger.error(f"[خطأ] Bot thread error: {e}")
+                logger.error(f"Bot thread error: {e}")
                 self.bot_running = False
             finally:
                 try:
                     loop.close()
                 except:
                     pass
-        
+    
         # تشغيل في thread منفصل
         self.bot_thread = threading.Thread(target=run_bot, daemon=True)
         self.bot_thread.start()
         self.bot_running = True
         
-        print("BraveBot البوت يعمل في الخلفية...")
+        print("البوت يعمل في الخلفية...")
         return True
 
     def start_dashboard_thread(self):
@@ -118,67 +117,55 @@ class BraveBotLauncher:
             try:
                 import subprocess
                 import webbrowser
+                import os
                 
-                print("[تحليل] تشغيل Dashboard...")
+                print("تشغيل Dashboard...")
                 
-                # تحديد مسار streamlit
-                streamlit_path = "streamlit"
-                if sys.platform == "win32":
-                    # جرب مسارات مختلفة في Windows
-                    possible_paths = [
-                        "streamlit",
-                        "python -m streamlit",
-                        f"{sys.executable} -m streamlit"
-                    ]
-                    
-                    for path in possible_paths:
-                        try:
-                            result = subprocess.run(
-                                f"{path} --version", 
-                                shell=True, 
-                                capture_output=True, 
-                                timeout=5
-                            )
-                            if result.returncode == 0:
-                                streamlit_path = path
-                                break
-                        except:
-                            continue
-                
-                # تشغيل Dashboard
+                # تأكد من وجود ملف Dashboard
                 dashboard_file = project_root / "dashboard" / "app.py"
                 if not dashboard_file.exists():
-                    # إذا لم يوجد ملف Dashboard، إنشاء واحد بسيط
+                    print("إنشاء Dashboard...")
                     self.create_simple_dashboard()
                 
-                cmd = f"{streamlit_path} run {dashboard_file} --server.port 8501 --server.headless true"
+                # تشغيل Dashboard باستخدام cmd
+                cmd = f'streamlit run "{dashboard_file}" --server.port 8501 --server.headless true'
                 
+                print(f"Executing: {cmd}")
+                
+                # تشغيل الأمر
                 process = subprocess.Popen(
                     cmd,
                     shell=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    cwd=str(project_root)
+                    cwd=str(project_root),
+                    creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0
                 )
                 
-                # انتظار قليل ثم فتح المتصفح
-                time.sleep(3)
+                # انتظار قليل للتأكد من البدء
+                time.sleep(5)
+                
+                # فتح المتصفح
                 try:
                     webbrowser.open("http://localhost:8501")
-                    print("🌐 تم فتح Dashboard في المتصفح!")
-                except:
-                    print("🌐 Dashboard متاح على: http://localhost:8501")
-                
-                # انتظار انتهاء العملية
-                process.wait()
+                    print("✅ Dashboard opened in browser!")
+                except Exception as e:
+                    print(f"Browser error: {e}")
+                    print("📱 Manual access: http://localhost:8501")
+            
+                # مراقبة العملية
+                while self.dashboard_running:
+                    if process.poll() is not None:
+                        print("❌ Dashboard process ended")
+                        break
+                    time.sleep(1)
                 
             except Exception as e:
-                logger.error(f"[خطأ] Dashboard error: {e}")
-                print("[خطأ] فشل تشغيل Dashboard")
-                print("[نصيحة] تأكد من تثبيت streamlit: pip install streamlit")
+                print(f"❌ Dashboard error: {e}")
+                print("💡 Try manual start: streamlit run dashboard/app.py")
             finally:
                 self.dashboard_running = False
-        
+    
         # تشغيل في thread منفصل
         self.dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
         self.dashboard_thread.start()
@@ -203,61 +190,61 @@ sys.path.append(str(project_root))
 
 st.set_page_config(
     page_title="BraveBot Dashboard",
-    page_icon="BraveBot",
+    page_icon="📊",
     layout="wide"
 )
 
-st.title("BraveBot BraveBot AI Commerce Empire")
+st.title("BraveBot AI Commerce Empire")
 st.markdown("---")
 
 # تحليل الترندات
-st.header("[إحصائيات] تحليل الترندات")
+st.header("تحليل الترندات")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    keyword = st.text_input("[بحث] كلمة البحث", value="gaming chair")
-    if st.button("[تشغيل] تحليل"):
+    keyword = st.text_input("كلمة البحث", value="gaming chair")
+    if st.button("تحليل"):
         try:
             from ai.trends_engine import fetch_viral_trends
             
             with st.spinner("جاري التحليل..."):
                 result = fetch_viral_trends(keyword, 5)
             
-            st.success("[نجح] تم التحليل بنجاح!")
+            st.success("تم التحليل بنجاح!")
             
             # عرض النتائج
             for trend in result.get('top_keywords', []):
                 st.metric(
-                    f"[هدف] {trend['keyword']}", 
+                    f"النتيجة: {trend['keyword']}", 
                     f"{trend['viral_score']}%",
                     f"المصدر: {trend.get('source', 'AI Analysis')}"
                 )
                 
         except Exception as e:
-            st.error(f"[خطأ] خطأ: {e}")
+            st.error(f"خطأ: {e}")
 
 with col2:
-    st.subheader("[سعر] التسعير الذكي")
+    st.subheader("التسعير الذكي")
     
-    base_price = st.number_input("💵 السعر الأساسي", value=29.99, min_value=0.01)
-    viral_score = st.slider("[تحليل] النقاط الفيروسية", 0, 100, 75)
+    base_price = st.number_input("السعر الأساسي", value=29.99, min_value=0.01)
+    viral_score = st.slider("النقاط الفيروسية", 0, 100, 75)
     
-    if st.button("[نصيحة] اقتراح السعر"):
+    if st.button("اقتراح السعر"):
         try:
             from ai.trends_engine import dynamic_pricing_suggestion
             
             pricing = dynamic_pricing_suggestion(base_price, viral_score)
             
-            st.success(f"[سعر] السعر المقترح: ${pricing['suggested_price']:.2f}")
-            st.info(f"[إحصائيات] هامش الربح: {pricing['profit_margin']:.1f}%")
+            st.success(f"السعر المقترح: ${pricing['suggested_price']:.2f}")
+            st.info(f"هامش الربح: {pricing['profit_margin']:.1f}%")
             
         except Exception as e:
-            st.error(f"[خطأ] خطأ: {e}")
+            st.error(f"خطأ: {e}")
 
 # معلومات النظام
 st.markdown("---")
-st.subheader("ℹ️ معلومات النظام")
+st.subheader("معلومات النظام")
 
 try:
     from core.ai_engine.ai_engine import get_engine_status
@@ -266,106 +253,106 @@ try:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("🧠 محرك AI", "نشط" if status['status'] == 'active' else "معطل")
+        st.metric("محرك AI", "نشط" if status['status'] == 'active' else "معطل")
     
     with col2:
-        st.metric("⚡ الإصدار", "v2.0")
+        st.metric("الإصدار", "v2.0")
     
     with col3:
-        st.metric("[تحليل] الحالة", "جاهز")
+        st.metric("الحالة", "جاهز")
         
 except Exception as e:
-    st.error(f"[خطأ] خطأ في حالة النظام: {e}")
+    st.error(f"خطأ في حالة النظام: {e}")
 '''
         
         dashboard_file = dashboard_dir / "app.py"
         with open(dashboard_file, 'w', encoding='utf-8') as f:
             f.write(dashboard_code)
         
-        print("[نجح] تم إنشاء Dashboard بسيط")
+        print("تم إنشاء Dashboard بسيط")
 
     def start_bot_only(self):
         """تشغيل البوت فقط"""
         
-        print("BraveBot تشغيل البوت...")
+        print("تشغيل البوت...")
         success = self.start_telegram_bot_thread()
         
         if success:
-            print("[نجح] البوت يعمل!")
-            print("📱 أرسل /start للبوت للبدء")
+            print("[SUCCESS] البوت يعمل!")
+            print("أرسل /start للبوت للبدء")
             
             # انتظار إشارة الإيقاف
             try:
                 while self.bot_running:
                     time.sleep(1)
             except KeyboardInterrupt:
-                print("\n🛑 تم إيقاف البوت")
+                print("\nتم إيقاف البوت")
                 
         return success
 
     def start_dashboard_only(self):
         """تشغيل Dashboard فقط"""
         
-        print("[تحليل] تشغيل Dashboard...")
+        print("تشغيل Dashboard...")
         success = self.start_dashboard_thread()
         
         if success:
-            print("[نجح] Dashboard يعمل!")
-            print("🌐 اذهب إلى: http://localhost:8501")
+            print("[SUCCESS] Dashboard يعمل!")
+            print("اذهب إلى: http://localhost:8501")
             
             # انتظار إشارة الإيقاف
             try:
                 while self.dashboard_running:
                     time.sleep(1)
             except KeyboardInterrupt:
-                print("\n🛑 تم إيقاف Dashboard")
+                print("\nتم إيقاف Dashboard")
                 
         return success
 
     def start_full_system(self):
         """تشغيل النظام الكامل"""
         
-        print("[مميز] تشغيل النظام الكامل...")
+        print("تشغيل النظام الكامل...")
         
         bot_success = self.start_telegram_bot_thread()
         dashboard_success = self.start_dashboard_thread()
         
         if bot_success and dashboard_success:
-            print("[نجح] النظام الكامل يعمل!")
-            print("📱 البوت: أرسل /start")
-            print("🌐 Dashboard: http://localhost:8501")
+            print("[SUCCESS] النظام الكامل يعمل!")
+            print("البوت: أرسل /start")
+            print("Dashboard: http://localhost:8501")
             
             # انتظار إشارة الإيقاف
             try:
                 while self.bot_running or self.dashboard_running:
                     time.sleep(1)
             except KeyboardInterrupt:
-                print("\n🛑 تم إيقاف النظام الكامل")
+                print("\nتم إيقاف النظام الكامل")
                 
         return bot_success and dashboard_success
 
     def show_settings_menu(self):
         """قائمة الإعدادات"""
         
-        print("\n🔧 إعدادات النظام")
+        print("\nإعدادات النظام")
         print("-" * 30)
         
         try:
             # فحص البيئة
             env_status = check_environment()
-            print(f"[نجح] البيئة: سليمة" if env_status else "[تحذير] البيئة: تحتاج مراجعة")
+            print(f"البيئة: سليمة" if env_status else "البيئة: تحتاج مراجعة")
             
             # حالة المحرك
             engine_status = get_engine_status()
-            print(f"🧠 محرك AI: {engine_status['status']}")
+            print(f"محرك AI: {engine_status['status']}")
             
             # إحصائيات سريعة
             from ai.trends_engine import fetch_viral_trends
             test_result = fetch_viral_trends("test", 1)
-            print(f"[تحليل] محرك الترندات: يعمل ({len(test_result.get('top_keywords', []))} نتيجة)")
+            print(f"محرك الترندات: يعمل ({len(test_result.get('top_keywords', []))} نتيجة)")
             
         except Exception as e:
-            print(f"[خطأ] خطأ في فحص الإعدادات: {e}")
+            print(f"خطأ في فحص الإعدادات: {e}")
         
         input("\nاضغط Enter للعودة...")
 
@@ -374,16 +361,16 @@ except Exception as e:
         
         # التحقق من البيئة
         if not check_environment():
-            print("[خطأ] فشل فحص البيئة!")
+            print("فشل فحص البيئة!")
             return
         
         # التحقق من محرك AI
         engine = get_ai_engine()
         if not engine:
-            print("[خطأ] فشل تحميل محرك AI!")
+            print("فشل تحميل محرك AI!")
             return
         
-        print("[نجح] جميع الأنظمة جاهزة!")
+        print("[SUCCESS] جميع الأنظمة جاهزة!")
         
         # حلقة القائمة الرئيسية
         while True:
@@ -399,13 +386,13 @@ except Exception as e:
                 elif choice == "4":
                     self.show_settings_menu()
                 elif choice == "5":
-                    print("👋 شكراً لاستخدام BraveBot!")
+                    print("شكراً لاستخدام BraveBot!")
                     break
                 else:
-                    print("[خطأ] خيار غير صحيح!")
+                    print("خيار غير صحيح!")
                     
             except KeyboardInterrupt:
-                print("\n👋 تم إنهاء البرنامج")
+                print("\nتم إنهاء البرنامج")
                 break
 
 def main():
@@ -417,7 +404,7 @@ def main():
         
     except Exception as e:
         logger.error(f"Critical error: {e}")
-        print(f"[خطأ] خطأ حرج: {e}")
+        print(f"خطأ حرج: {e}")
 
 if __name__ == "__main__":
     main()

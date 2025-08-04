@@ -1,13 +1,57 @@
-streamlit==1.28.0
-pandas==2.1.0
-plotly==5.17.0
-requests==2.31.0
-pytrends==4.9.2
-python-dotenv==1.0.0
-numpy==1.24.3
-python-dateutil==2.8.2
-praw==7.7.1
-Pillow==10.0.0
-aiofiles==23.2.1
-pyyaml==6.0.1
-bcrypt==4.0.1
+# BraveBot AI Commerce & Trading Empire v3.0 Dependencies
+
+# Core Framework
+python-telegram-bot>=20.0
+streamlit>=1.28.0
+pandas>=2.0.0
+plotly>=5.15.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Database & Storage
+# sqlite3  # مدمج مع Python - لا نحتاج تثبيته
+sqlalchemy>=2.0.0
+
+# AI & Analysis
+pytrends>=4.9.0
+praw>=7.7.0
+
+# E-commerce APIs
+# amazon-sp-api  # سنثبتها لاحقاً عند الحاجة
+# ebaysdk-python  # سنثبتها لاحقاً عند الحاجة
+selenium>=4.15.0
+webdriver-manager>=4.0.0
+
+# Trading APIs
+# binance>=1.0.0  # سنثبتها عند تفعيل التداول
+# ccxt>=4.0.0
+# alpha-vantage>=2.3.0
+yfinance>=0.2.0
+
+# Security & Encryption
+cryptography>=41.0.0
+# pycryptodome>=3.19.0  # بديل اختياري
+
+# Async & Threading
+# asyncio  # مدمج مع Python
+aiohttp>=3.9.0
+
+# Monitoring & Alerts
+# sentry-sdk>=1.38.0  # اختياري
+
+# Web Scraping
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Data Processing
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Development & Testing
+# pytest>=7.4.0  # للتطوير فقط
+# pytest-asyncio>=0.21.0
+
+# Optional - Production
+# gunicorn>=21.2.0  # للإنتاج
+# redis>=5.0.0
+# celery>=5.3.0

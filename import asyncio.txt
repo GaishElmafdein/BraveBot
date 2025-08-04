@@ -1,0 +1,65 @@
+import asyncio
+from core.ai_engine.trend_analyzer import TrendAnalyzer
+from core.ai_engine.profit_calculator import ProfitCalculator
+
+async def test_complete_ai_engine():
+    """🧪 اختبار المحرك الكامل"""
+    
+    print("🚀 Testing BraveBot AI Engine...")
+    print("=" * 50)
+    
+    # 1. اختبار محلل الاتجاهات
+    print("\n🔍 TESTING TREND ANALYZER:")
+    analyzer = TrendAnalyzer()
+    trending_data = await analyzer.analyze_trending_products(['electronics', 'gaming'])
+    
+    # 2. اختبار حاسبة الأرباح
+    print("\n💰 TESTING PROFIT CALCULATOR:")
+    calculator = ProfitCalculator()
+    
+    # دمج النتائج
+    profitable_products = []
+    
+    for category, products in trending_data.items():
+        for product in products[:2]:  # أفضل منتجين من كل فئة
+            # حساب الربح
+            analysis = calculator.calculate_comprehensive_profit(
+                product_name=product['keyword'],
+                amazon_price=15.99,  # سعر تجريبي
+                trend_data=product
+            )
+            
+            if analysis.profit_margin > 30:  # هامش ربح أكثر من 30%
+                profitable_products.append({
+                    'analysis': analysis,
+                    'trend_data': product
+                })
+    
+    # 3. عرض أفضل الفرص
+    print("\n🏆 TOP PROFITABLE OPPORTUNITIES:")
+    print("=" * 50)
+    
+    profitable_products.sort(key=lambda x: x['analysis'].profit_margin, reverse=True)
+    
+    for i, item in enumerate(profitable_products[:5], 1):
+        analysis = item['analysis']
+        trend = item['trend_data']
+        
+        print(f"\n🥇 #{i} - {analysis.product_name}")
+        print(f"   💰 Profit: ${analysis.profit_amount:.2f} ({analysis.profit_margin:.1f}%)")
+        print(f"   📈 Trend Score: {trend['trend_score']:.1f}")
+        print(f"   🎯 Confidence: {analysis.confidence_level:.1f}%")
+        print(f"   ⚠️ Risk: {analysis.risk_score:.1f}/100")
+        print(f"   🏆 Competition: {analysis.competition_level}")
+        
+        recommendations = calculator.get_profit_recommendations(analysis)
+        print(f"   💡 {recommendations[0] if recommendations else 'No recommendations'}")
+    
+    print(f"\n✅ AI Engine Test Complete!")
+    print(f"   📊 Analyzed {len(trending_data)} categories")
+    print(f"   🔍 Found {sum(len(products) for products in trending_data.values())} trending products")
+    print(f"   💰 Identified {len(profitable_products)} profitable opportunities")
+    print(f"   🎯 Success Rate: {len(profitable_products)/sum(len(products) for products in trending_data.values())*100:.1f}%")
+
+if __name__ == "__main__":
+    asyncio.run(test_complete_ai_engine())

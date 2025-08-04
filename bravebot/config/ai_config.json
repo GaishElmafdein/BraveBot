@@ -1,0 +1,11 @@
+{
+    "cache_duration": 300,
+    "max_requests_per_minute": 30,
+    "fallback_mode": true,
+    "debug_mode": false,
+    "engines": {
+        "trends": true,
+        "pricing": true,
+        "insights": true
+    }
+}

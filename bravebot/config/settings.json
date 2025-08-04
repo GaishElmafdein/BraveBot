@@ -1,0 +1,24 @@
+{
+    "system_check": {
+        "ai_engine": {
+            "status": "active",
+            "last_checked": "2023-10-01T12:00:00Z"
+        },
+        "telegram_bot": {
+            "status": "active",
+            "last_checked": "2023-10-01T12:00:00Z"
+        },
+        "dashboard": {
+            "status": "active",
+            "last_checked": "2023-10-01T12:00:00Z"
+        },
+        "database": {
+            "status": "connected",
+            "last_checked": "2023-10-01T12:00:00Z"
+        }
+    },
+    "settings": {
+        "check_interval": 60,
+        "log_level": "INFO"
+    }
+}
